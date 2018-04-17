@@ -27,8 +27,8 @@
 
 void perrorf(const char *fmt, ...);
 void reportf(const char *fmt, ...);
-void die(int status, const char *fmt, ...) __attribute__((noreturn));
-void pdie(int status, const char *fmt, ...) __attribute__((noreturn));
+void die(int status, const char *fmt, ...) __attribute__ ((noreturn));
+void pdie(int status, const char *fmt, ...) __attribute__ ((noreturn));
 pid_t dfork(void);
 void alloc_die(void *);
 
@@ -97,8 +97,7 @@ void die(int status, const char *fmt, ...)
  *
  * Reads a line from fd.
  */
-int
-readline(int fd, char *buf, int n)
+int readline(int fd, char *buf, int n)
 {
 	int ln;
 	int tn = 0;
@@ -113,20 +112,22 @@ readline(int fd, char *buf, int n)
 		ln = read(fd, &c, 1);
 
 		if (ln == -1) {
-			if (errno == EINTR) continue;
-			else return -1;
-		}
-		else if (ln == 0) {
-			if (tn == 0) return 0;
-			else break;
-		}
-		else {
-			if (tn < n-1) {
+			if (errno == EINTR)
+				continue;
+			else
+				return -1;
+		} else if (ln == 0) {
+			if (tn == 0)
+				return 0;
+			else
+				break;
+		} else {
+			if (tn < n - 1) {
 				tn++;
 				*buf++ = c;
 			}
 
-			if (c == '\n' || tn==n-1)
+			if (c == '\n' || tn == n - 1)
 				break;
 		}
 	}
