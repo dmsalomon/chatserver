@@ -30,9 +30,8 @@ int main(int argc, char **argv)
 
 	name = argv[1];
 
-	if (strlen(name) > NAMESIZE-1)
-		die(1, "username cannot exceed %d characters", NAMESIZE-1);
-
+	if (strlen(name) > NAMESIZE - 1)
+		die(1, "username cannot exceed %d characters", NAMESIZE - 1);
 
 	if (argc > 2)
 		port = atoport(argv[2]);
@@ -47,7 +46,8 @@ int main(int argc, char **argv)
 
 	// continuously accept clients
 	printf(HEADER "waiting...");
-	while ((cfd = accept(sfd, (struct sockaddr*)&peer_addr, &peer_sz)) != -1) {
+	while ((cfd =
+		accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
 		serve(cfd);
 		printf(HEADER "waiting...");
 	}
@@ -77,15 +77,19 @@ int init(unsigned short port)
 
 	/* Make the port immediately reusable after termination */
 	int reuse = 1;
-	if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
+	if (setsockopt
+	    (sfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse,
+	     sizeof(reuse)) < 0)
 		perror("setsockopt(SO_REUSEADDR) failed");
 
 #ifdef SO_REUSEPORT
-    	if (setsockopt(sfd, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0)
+	if (setsockopt
+	    (sfd, SOL_SOCKET, SO_REUSEPORT, (const char *)&reuse,
+	     sizeof(reuse)) < 0)
 		perror("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-	if (bind(sfd, (struct sockaddr*)&my_addr, sizeof(my_addr)) < 0)
+	if (bind(sfd, (struct sockaddr *)&my_addr, sizeof(my_addr)) < 0)
 		pdie(1, "bind()");
 
 	if (listen(sfd, 50) < 0)

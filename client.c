@@ -29,8 +29,8 @@ int main(int argc, char **argv)
 
 	name = argv[1];
 
-	if (strlen(name) > NAMESIZE-1)
-		die(1, "username cannot exceed %d characters", NAMESIZE-1);
+	if (strlen(name) > NAMESIZE - 1)
+		die(1, "username cannot exceed %d characters", NAMESIZE - 1);
 
 	if (argc > 2)
 		addr = argv[2];
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
 	printf(HEADER "connecting...");
 
-	sfd = connect(cfd, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+	sfd = connect(cfd, (struct sockaddr *)&peer_addr, sizeof(peer_addr));
 	if (sfd < 0)
 		pdie(1, "connect()");
 
@@ -84,9 +84,10 @@ void comm(int cfd)
 	n = readline(cfd, peername, sizeof(peername));
 
 	// is the server already gone?
-	if (n == 0) goto term;
+	if (n == 0)
+		goto term;
 
-	peername[n-1] = '\0';
+	peername[n - 1] = '\0';
 
 	printf("connection established with [%s]\n", peername);
 	puts(HEADER "press control-D to terminate the connection");
@@ -98,31 +99,34 @@ void comm(int cfd)
 		FD_SET(0, &rfds);
 		FD_SET(cfd, &rfds);
 
-		if (select(cfd+1, &rfds, NULL, NULL, NULL) < 0)
+		if (select(cfd + 1, &rfds, NULL, NULL, NULL) < 0)
 			pdie(1, "select()");
 
 		if (FD_ISSET(0, &rfds)) {
 			n = readline(0, buf, sizeof(buf));
 
 			// control-D
-			if (n == 0) break;
+			if (n == 0)
+				break;
 
 			n = write(cfd, buf, n);
-			if (n == -1) break;
+			if (n == -1)
+				break;
 		}
 
 		if (FD_ISSET(cfd, &rfds)) {
 			n = readline(cfd, buf, sizeof(buf));
 
 			// server has terminated the conversation
-			if (n == 0) break;
+			if (n == 0)
+				break;
 
 			printf("[%s] %s", peername, buf);
-			if (buf[n-1] != '\n')
+			if (buf[n - 1] != '\n')
 				printf("\n");
 		}
 	}
 
-term:
+ term:
 	printf(HEADER "connection with %s terminated\n", peername);
 }
