@@ -115,7 +115,7 @@ void *serve(void *arg)
 	close(cfd);
 	sprintf(buf, "%s has left", name);
 	msg_add(c, buf);
-	loginfo("done with client :(\n");
+	loginfo("%s has left\n", name);
 
 	client_rm(c);
 	return NULL;

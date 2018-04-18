@@ -53,8 +53,9 @@ int main(int argc, char **argv)
 		pdie(1, "socket()");
 
 	printf(HEADER "connecting...");
-
 	sfd = connect(cfd, (struct sockaddr *)&peer_addr, sizeof(peer_addr));
+	puts("done");
+
 	if (sfd < 0)
 		pdie(1, "connect()");
 
@@ -73,24 +74,16 @@ int main(int argc, char **argv)
 void comm(int cfd)
 {
 	int n;
+	char sender[NAMESIZE];
 	char buf[BUFSIZE];
-	char peername[NAMESIZE] = "peer";
 
 	/* sending name */
 	write(cfd, name, strlen(name));
-	write(cfd, "\n", 1);
-
-	/* receiving the server name */
-	n = readline(cfd, peername, sizeof(peername));
+	n = write(cfd, "\n", 1);
 
 	// is the server already gone?
 	if (n == 0)
-		goto term;
-
-	peername[n - 1] = '\0';
-
-	printf("connection established with [%s]\n", peername);
-	puts(HEADER "press control-D to terminate the connection");
+		return;
 
 	fd_set rfds;
 	FD_ZERO(&rfds);
@@ -115,18 +108,12 @@ void comm(int cfd)
 		}
 
 		if (FD_ISSET(cfd, &rfds)) {
-			n = readline(cfd, buf, sizeof(buf));
-
-			// server has terminated the conversation
-			if (n == 0)
+			if (read_line(cfd, sender, NAMESIZE) < 1)
+				break;
+			if (read_line(cfd, buf, BUFSIZE) < 1)
 				break;
 
-			printf("[%s] %s", peername, buf);
-			if (buf[n - 1] != '\n')
-				printf("\n");
+			printf("[%s] %s\n", sender, buf);
 		}
 	}
-
- term:
-	printf(HEADER "connection with %s terminated\n", peername);
 }

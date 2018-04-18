@@ -148,13 +148,24 @@ int readline(int fd, char *buf, int n)
 
 int read_line(int fd, char *buf, size_t bfsz)
 {
+	int n;
 	size_t i = 0;
 	char c = '\0';
 
 	do {
-		if (read(fd, &c, sizeof(char)) != sizeof(char))
-			return -1;
-		buf[i++] = c;
+		n = read(fd, &c, sizeof(char));
+		if (n == -1)
+			if (errno == EINTR)
+				continue;
+			else
+				return -1;
+		else if (n == 0)
+			if (i)
+				break;
+			else
+				return 0;
+		else
+			buf[i++] = c;
 	} while (c != '\n' && i < bfsz);
 	buf[i - 1] = '\0';
 	return i;
