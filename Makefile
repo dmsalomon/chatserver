@@ -1,5 +1,6 @@
 
 CFLAGS:=-Wall
+LDFLAGS:=-pthread
 PROGS:=\
 	server\
 	client
