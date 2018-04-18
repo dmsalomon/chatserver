@@ -45,11 +45,9 @@ int main(int argc, char **argv)
 	sfd = init(port);
 
 	// continuously accept clients
-	printf(HEADER "waiting...");
 	while ((cfd =
 		accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
 		serve(cfd);
-		printf(HEADER "waiting...");
 	}
 
 	// error if here
