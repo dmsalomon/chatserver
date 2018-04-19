@@ -8,7 +8,6 @@ DIR:=$(notdir $(basename $(CURDIR)))
 ZIP:=$(DIR).zip
 
 all: $(PROGS)
-	echo $(DIR)
 
 clean:
 	$(RM) *.o $(PROGS) $(ZIP)
