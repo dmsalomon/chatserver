@@ -17,4 +17,6 @@ $(ZIP): clean
 	zip -r $@ $(DIR)/*.[ch] $(DIR)/Makefile && \
 	mv $@ $(DIR)/.
 
-.PHONY: all clean
+dist: $(ZIP)
+
+.PHONY: all clean dist
