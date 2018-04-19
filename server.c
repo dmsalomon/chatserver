@@ -85,34 +85,32 @@ int main(int argc, char **argv)
 	close(sfd);
 }
 
-void *serve(void *arg)
+void *serve(void *pfd)
 {
+	int fd;
 	char name[NAMESIZE];
 	char buf[BUFSIZE];
 	struct client *c;
 
-	if (!arg)
+	if (!pfd || (fd = *(int *)pfd) <= 0)
 		return NULL;
 
-	int cfd = *(int *)arg;
+	free(pfd);
 
-	if (cfd <= 0)
+	if (read_line(fd, name, NAMESIZE) < 0)
 		return NULL;
 
-	if (read_line(cfd, name, NAMESIZE) < 0)
-		return NULL;
-
-	c = client_add(cfd, name);
+	c = client_add(fd, name);
 	sprintf(buf, "%s has entered", name);
 	msg_add(c, buf);
 	loginfo("receieved client: %s\n", name);
 
-	while (read_line(cfd, buf, BUFSIZE) > 0) {
+	while (read_line(fd, buf, BUFSIZE) > 0) {
 		loginfo("msg: [%s] %s\n", name, buf);
 		msg_add(c, buf);
 	}
 
-	close(cfd);
+	close(fd);
 	sprintf(buf, "%s has left", name);
 	msg_add(c, buf);
 	loginfo("%s has left\n", name);
