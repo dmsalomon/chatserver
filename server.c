@@ -37,7 +37,7 @@ struct msg {
 };
 
 struct msg *msg_add(const struct client *, const char *);
-void msg_rm(struct msg *);
+struct msg *msg_rm(struct msg *);
 void msg_send(struct msg *);
 
 struct client *client_add(int, const char *);
@@ -119,6 +119,8 @@ void *serve(void *arg)
 		msg_add(c, buf);
 	}
 
+	/* TODO: cant delete client before all messages are consumed
+	 * may have a message that references this client object*/
 	client_rm(c);
 	close(fd);
 
@@ -131,13 +133,12 @@ void *serve(void *arg)
 void *broadcast(void *arg)
 {
 	struct msg *m;
-
 	pthread_mutex_lock(&msg_mx);
 
 	for (;;) {
-		for (m = msgs; m; m = m->next) {
+		for (m = msgs; m; ) {
 			msg_send(m);
-			msg_rm(m);
+			m = msg_rm(m);
 		}
 		pthread_cond_wait(&msg_has, &msg_mx);
 	}
@@ -162,9 +163,6 @@ void msg_send(struct msg *m)
 	}
 
 	pthread_mutex_unlock(&client_mx);
-
-	if (m->sender == srv)
-		loginfo("[%s] %s\n", srv->name, m->buf);
 }
 
 void *poll(void *arg)
@@ -229,20 +227,24 @@ struct msg *msg_add(const struct client *sender, const char *buf)
 	return m;
 }
 
-void msg_rm(struct msg *m)
+struct msg *msg_rm(struct msg *m)
 {
 	struct msg *p;
 
 	if (msgs == m) {
 		msgs = msgs->next;
 	} else {
-		for (p = msgs; p && p ->next != m; p = p->next)
+		for (p = msgs; p && p->next != m; p = p->next)
 			;
 		if (p && p->next == m)
 			p->next = m->next;
 	}
+
+	p = m->next;
 	free(m->buf);
 	free(m);
+
+	return p;
 }
 
 struct client *client_add(int fd, const char *name)
