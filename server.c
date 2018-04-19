@@ -40,8 +40,7 @@ struct msg *msg_add(const struct client *, const char *);
 void msg_rm(struct msg *);
 void msg_send(struct msg *);
 
-struct client *client_new(int, const char *);
-void client_add(struct client *);
+struct client *client_add(int, const char *);
 void client_rm(struct client *);
 
 struct msg *msgs;
@@ -64,7 +63,7 @@ int main(int argc, char **argv)
 		die(1, "usage: server [port]");
 
 	if (argc > 1)
-		port = atoport(argv[2]);
+		port = atoport(argv[1]);
 
 	if (port == 0)
 		die(1, "invalid port number");
@@ -112,10 +111,8 @@ void *serve(void *arg)
 		return NULL;
 
 	snprintf(buf, BUFSIZE, "%s has entered", name);
-	/* TODO: rework the code to handle announcement separately */
-	c = client_new(fd, name);
-	msg_add(c, buf);
-	client_add(c);
+	c = client_add(fd, name);
+	msg_add(srv, buf);
 
 	while (read_line(fd, buf, BUFSIZE) > 0) {
 		loginfo("msg: [%s] %s\n", name, buf);
@@ -248,17 +245,12 @@ void msg_rm(struct msg *m)
 	free(m);
 }
 
-struct client *client_new(int fd, const char *name)
+struct client *client_add(int fd, const char *name)
 {
 	struct client *c = dmalloc(sizeof(struct client));
 	c->fd = fd;
 	strcpy(c->name, name);
 
-	return c;
-}
-
-void client_add(struct client *c)
-{
 	pthread_mutex_lock(&client_mx);
 
 	if (clients)
@@ -268,6 +260,8 @@ void client_add(struct client *c)
 	clients = c;
 
 	pthread_mutex_unlock(&client_mx);
+
+	return c;
 }
 
 void client_rm(struct client *c)
