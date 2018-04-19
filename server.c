@@ -15,27 +15,28 @@
 #define PROGNAME "server"
 #include "util.h"
 
+void *serve(void *);
+void *poll(void *);
+void *broadcast(void *);
+void loginfo(const char *, ...);
+int tcpbind(unsigned short port);
+
 struct client {
 	int fd;
 	char name[NAMESIZE];
 	struct client *next;
 };
 
+const struct client _srv = {0, "server", NULL};
+const struct client *srv = &_srv;
+
 struct msg {
 	char *buf;
-	struct client *sender;
+	const struct client *sender;
 	struct msg *next;
 };
 
-int tcpopen(unsigned short port);
-void *serve(void *);
-void *poll(void *);
-void *hog(void *);
-void *broadcast(void *);
-void handler(int sig);
-void loginfo(const char *, ...);
-
-struct msg *msg_add(struct client *, const char *);
+struct msg *msg_add(const struct client *, const char *);
 void msg_rm(struct msg *);
 void msg_send(struct msg *);
 
@@ -52,10 +53,11 @@ pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
 int main(int argc, char **argv)
 {
 	int sfd, cfd;
+	int *arg;
 	unsigned short port = DEFPORT;
+	pthread_t tid;
 	struct sockaddr_in peer_addr;
 	socklen_t peer_sz = sizeof(peer_addr);
-	pthread_t tid;
 
 	if (argc > 2)
 		die(1, "usage: server [port]");
@@ -69,55 +71,60 @@ int main(int argc, char **argv)
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
 
-	sfd = tcpopen(port);
+	sfd = tcpbind(port);
 	//pthread_create(&tid, NULL, poll, NULL);
-	pthread_create(&tid, NULL, broadcast, NULL);
+	if ((errno = pthread_create(&tid, NULL, broadcast, NULL)))
+		pdie(1, "pthread_create()");
+	if ((errno = pthread_detach(tid)))
+		pdie(1, "pthread_detach()");
 
 	// continuously accept clients
-	while ((cfd =
-		accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
-		if (pthread_create(&tid, NULL, serve, &cfd))
+	while ((cfd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
+		arg = dmalloc(sizeof(int));
+		*arg = cfd;
+		if ((errno = pthread_create(&tid, NULL, serve, arg)))
 			pdie(1, "pthread_create()");
+		if ((errno = pthread_detach(tid)))
+			pdie(1, "pthread_detach()");
 	}
 
 	// error if here
 	pdie(1, "accept()");
-	close(sfd);
+	close(sfd); //useless
 }
 
+// per client thread
 void *serve(void *arg)
 {
+	int fd;
 	char name[NAMESIZE];
 	char buf[BUFSIZE];
 	struct client *c;
 
-	if (!arg)
+	if (!arg || (fd = *(int *)arg) <= 0)
 		return NULL;
 
-	int cfd = *(int *)arg;
+	free(arg);
 
-	if (cfd <= 0)
+	// get clients name
+	if (read_line(fd, name, NAMESIZE) < 0)
 		return NULL;
 
-	if (read_line(cfd, name, NAMESIZE) < 0)
-		return NULL;
+	snprintf(buf, BUFSIZE, "%s has entered", name);
+	/* TODO: Make this not trigger on the this client */
+	msg_add(srv, buf);
+	c = client_add(fd, name);
 
-	c = client_add(cfd, name);
-	sprintf(buf, "%s has entered", name);
-	msg_add(c, buf);
-	loginfo("receieved client: %s\n", name);
-
-	while (read_line(cfd, buf, BUFSIZE) > 0) {
+	while (read_line(fd, buf, BUFSIZE) > 0) {
 		loginfo("msg: [%s] %s\n", name, buf);
 		msg_add(c, buf);
 	}
 
-	close(cfd);
-	sprintf(buf, "%s has left", name);
-	msg_add(c, buf);
-	loginfo("%s has left\n", name);
-
 	client_rm(c);
+	close(fd);
+
+	snprintf(buf, BUFSIZE, "%s has left", name);
+	msg_add(srv, buf);
 	return NULL;
 }
 
@@ -156,17 +163,9 @@ void msg_send(struct msg *m)
 	}
 
 	pthread_mutex_unlock(&client_mx);
-}
 
-void *hog(void *arg)
-{
-	for (;;) {
-		pthread_mutex_lock(&client_mx);
-		sleep(10);
-		pthread_mutex_unlock(&client_mx);
-		sleep(2);
-	}
-	return NULL;
+	if (m->sender == srv)
+		loginfo("[%s] %s\n", srv->name, m->buf);
 }
 
 void *poll(void *arg)
@@ -206,10 +205,11 @@ void loginfo(const char *fmt, ...)
 	va_end(ap);
 }
 
-struct msg *msg_add(struct client *sender, const char *buf)
+struct msg *msg_add(const struct client *sender, const char *buf)
 {
 	struct msg *p, *m = dmalloc(sizeof(struct msg));
 	m->buf = strdup(buf);
+	if (!m->buf) pthread_exit(NULL);
 	m->sender = sender;
 
 	pthread_mutex_lock(&msg_mx);
@@ -246,10 +246,10 @@ void msg_rm(struct msg *m)
 	free(m);
 }
 
-struct client *client_add(int cfd, const char *name)
+struct client *client_add(int fd, const char *name)
 {
 	struct client *c = dmalloc(sizeof(struct client));
-	c->fd = cfd;
+	c->fd = fd;
 	strncpy(c->name, name, strlen(name));
 
 	pthread_mutex_lock(&client_mx);
@@ -279,47 +279,46 @@ void client_rm(struct client *c)
 		if (p && p->next == c)
 			p->next = c->next;
 	}
-	free(c);
 
+	free(c);
 	pthread_mutex_unlock(&client_mx);
 }
 
 /*
  * allocate the socket and bind to port
  */
-int tcpopen(unsigned short port)
+int tcpbind(unsigned short port)
 {
-	int sfd;
-	struct sockaddr_in my_addr;
+	int fd;
+	struct sockaddr_in sin;
 
-	memset(&my_addr, 0, sizeof(my_addr));
-	my_addr.sin_family = AF_INET;
-	my_addr.sin_port = htons(port);
-	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	sfd = socket(PF_INET, SOCK_STREAM, 0);
-	if (sfd < 0)
+	if ((fd = socket(PF_INET, SOCK_STREAM, 0)) < 0)
 		pdie(1, "socket()");
 
 	/* Make the port immediately reusable after termination */
 	int reuse = 1;
 	if (setsockopt
-	    (sfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse,
+	    (fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse,
 	     sizeof(reuse)) < 0)
 		perror("setsockopt(SO_REUSEADDR) failed");
 
 #ifdef SO_REUSEPORT
 	if (setsockopt
-	    (sfd, SOL_SOCKET, SO_REUSEPORT, (const char *)&reuse,
+	    (fd, SOL_SOCKET, SO_REUSEPORT, (const char *)&reuse,
 	     sizeof(reuse)) < 0)
 		perror("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-	if (bind(sfd, (struct sockaddr *)&my_addr, sizeof(my_addr)) < 0)
+	if (bind(fd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
 		pdie(1, "bind()");
 
-	if (listen(sfd, 50) < 0)
+	if (listen(fd, 50) < 0)
 		pdie(1, "listen()");
 
-	return sfd;
+	return fd;
 }

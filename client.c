@@ -13,16 +13,16 @@
 #define PROGNAME "client"
 #include "util.h"
 
+int tcpopen(const char *addr, unsigned short port);
 void comm(int client_fd);
 
 const char *name;
 
 int main(int argc, char **argv)
 {
-	int sfd, cfd;
+	int fd;
 	char *addr = DEFADDR;
 	unsigned short port = DEFPORT;
-	struct sockaddr_in peer_addr;
 
 	if (argc < 2 || argc > 4)
 		die(1, "usage: " PROGNAME " username [host] [port]");
@@ -40,30 +40,35 @@ int main(int argc, char **argv)
 	if (port == 0)
 		die(1, "invalid port number");
 
+
+	fd = tcpopen(addr, port);
 	setbuf(stdout, NULL);
 
-	memset(&peer_addr, 0, sizeof(peer_addr));
-	peer_addr.sin_family = AF_INET;
-	peer_addr.sin_port = htons(port);
-	if (inet_pton(AF_INET, addr, &peer_addr.sin_addr) == 0)
+	comm(fd);
+	close(fd);
+}
+
+int tcpopen(const char *addr, unsigned short port)
+{
+	int fd;
+	struct sockaddr_in sin;
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	if (inet_pton(AF_INET, addr, &sin.sin_addr) == 0)
 		die(1, "%s: not a valid ip address", addr);
 
-	cfd = socket(PF_INET, SOCK_STREAM, 0);
-	if (cfd < 0)
+	if ((fd= socket(PF_INET, SOCK_STREAM, 0)) < 0)
 		pdie(1, "socket()");
 
-	printf(HEADER "connecting...");
-	sfd = connect(cfd, (struct sockaddr *)&peer_addr, sizeof(peer_addr));
-	puts("done");
-
-	if (sfd < 0)
+	if(connect(fd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
 		pdie(1, "connect()");
 
-	comm(cfd);
+	return fd;
 
-	close(sfd);
-	close(cfd);
 }
+
 
 /* communicate with the server
  *
@@ -71,15 +76,15 @@ int main(int argc, char **argv)
  * will crash if the server is unreachable. This
  * is expected behavior, since the client is ephemeral.
  */
-void comm(int cfd)
+void comm(int fd)
 {
 	int n;
 	char sender[NAMESIZE];
 	char buf[BUFSIZE];
 
 	/* sending name */
-	write(cfd, name, strlen(name));
-	n = write(cfd, "\n", 1);
+	write(fd, name, strlen(name));
+	n = write(fd, "\n", 1);
 
 	// is the server already gone?
 	if (n == 0)
@@ -90,9 +95,9 @@ void comm(int cfd)
 
 	for (;;) {
 		FD_SET(0, &rfds);
-		FD_SET(cfd, &rfds);
+		FD_SET(fd, &rfds);
 
-		if (select(cfd + 1, &rfds, NULL, NULL, NULL) < 0)
+		if (select(fd + 1, &rfds, NULL, NULL, NULL) < 0)
 			pdie(1, "select()");
 
 		if (FD_ISSET(0, &rfds)) {
@@ -102,15 +107,15 @@ void comm(int cfd)
 			if (n == 0)
 				break;
 
-			n = write(cfd, buf, n);
+			n = write(fd, buf, n);
 			if (n == -1)
 				break;
 		}
 
-		if (FD_ISSET(cfd, &rfds)) {
-			if (read_line(cfd, sender, NAMESIZE) < 1)
+		if (FD_ISSET(fd, &rfds)) {
+			if (read_line(fd, sender, NAMESIZE) < 1)
 				break;
-			if (read_line(cfd, buf, BUFSIZE) < 1)
+			if (read_line(fd, buf, BUFSIZE) < 1)
 				break;
 
 			printf("[%s] %s\n", sender, buf);
