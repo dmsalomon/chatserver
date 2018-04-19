@@ -40,7 +40,8 @@ struct msg *msg_add(const struct client *, const char *);
 void msg_rm(struct msg *);
 void msg_send(struct msg *);
 
-struct client *client_add(int, const char *);
+struct client *client_new(int, const char *);
+void client_add(struct client *);
 void client_rm(struct client *);
 
 struct msg *msgs;
@@ -111,9 +112,10 @@ void *serve(void *arg)
 		return NULL;
 
 	snprintf(buf, BUFSIZE, "%s has entered", name);
-	/* TODO: Make this not trigger on the this client */
-	msg_add(srv, buf);
-	c = client_add(fd, name);
+	/* TODO: rework the code to handle announcement separately */
+	c = client_new(fd, name);
+	msg_add(c, buf);
+	client_add(c);
 
 	while (read_line(fd, buf, BUFSIZE) > 0) {
 		loginfo("msg: [%s] %s\n", name, buf);
@@ -246,12 +248,17 @@ void msg_rm(struct msg *m)
 	free(m);
 }
 
-struct client *client_add(int fd, const char *name)
+struct client *client_new(int fd, const char *name)
 {
 	struct client *c = dmalloc(sizeof(struct client));
 	c->fd = fd;
-	strncpy(c->name, name, strlen(name));
+	strcpy(c->name, name);
 
+	return c;
+}
+
+void client_add(struct client *c)
+{
 	pthread_mutex_lock(&client_mx);
 
 	if (clients)
@@ -261,8 +268,6 @@ struct client *client_add(int fd, const char *name)
 	clients = c;
 
 	pthread_mutex_unlock(&client_mx);
-
-	return c;
 }
 
 void client_rm(struct client *c)
