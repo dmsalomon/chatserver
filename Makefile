@@ -4,7 +4,8 @@ LDFLAGS:=-pthread
 PROGS:=\
 	server\
 	client
-ZIP:=hw5.zip
+DIR:=$(notdir $(basename $(CURDIR)))
+ZIP:=$(DIR).zip
 
 all: $(PROGS)
 
@@ -13,7 +14,9 @@ clean:
 
 $(ZIP): clean
 	cd .. && \
-	zip -r $@ hw5/*.[ch] hw5/Makefile && \
-	mv $@ hw5/.
+	zip -r $@ $(DIR)/*.[ch] $(DIR)/Makefile && \
+	mv $@ $(DIR)/.
 
-.PHONY: all clean
+dist: $(ZIP)
+
+.PHONY: all clean dist
