@@ -18,7 +18,6 @@
 void *serve(void *);
 void *poll(void *);
 void *broadcast(void *);
-void loginfo(const char *, ...);
 int tcpbind(unsigned short port);
 
 struct client {
@@ -27,17 +26,19 @@ struct client {
 	struct client *next;
 };
 
-const struct client _srv = {0, "server", NULL};
-const struct client *srv = &_srv;
+const struct client srv = {0, "server", NULL};
+
+enum msg_type { MSG_REG, MSG_ADM };
 
 struct msg {
-	char *buf;
+	enum msg_type type;
+	char buf[BUFSIZE];
 	const struct client *sender;
 	struct msg *next;
 };
 
-struct msg *msg_add(const struct client *, const char *);
-struct msg *msg_rm(struct msg *);
+struct msg *msg_push(enum msg_type, const struct client *, const char *);
+struct msg *msg_pop(void);
 void msg_send(struct msg *);
 
 struct client *client_add(int, const char *);
@@ -46,9 +47,13 @@ void client_rm(struct client *);
 struct msg *msgs;
 pthread_mutex_t msg_mx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t msg_has = PTHREAD_COND_INITIALIZER;
+pthread_cond_t msg_empty = PTHREAD_COND_INITIALIZER;
 
 struct client *clients;
 pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
+
+void loginfo(const char *, ...);
+void logmsg(const struct msg *);
 
 int main(int argc, char **argv)
 {
@@ -72,7 +77,8 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 
 	sfd = tcpbind(port);
-	//pthread_create(&tid, NULL, poll, NULL);
+
+	// spawn the thread to send messages.
 	if ((errno = pthread_create(&tid, NULL, broadcast, NULL)))
 		pdie(1, "pthread_create()");
 	if ((errno = pthread_detach(tid)))
@@ -111,25 +117,18 @@ void *serve(void *pfd)
 
 	c = client_add(fd, name);
 	sprintf(buf, "%s has entered", name);
-	msg_add(c, buf);
-	loginfo("receieved client: %s\n", name);
+	msg_push(MSG_ADM, c, buf);
 
 	while (read_line(fd, buf, BUFSIZE) > 0) {
-		loginfo("msg: [%s] %s\n", name, buf);
-		msg_add(c, buf);
+		msg_push(MSG_REG, c, buf);
 	}
 
-	close(fd);
 	sprintf(buf, "%s has left", name);
-	loginfo("%s has left\n", name);
+	msg_push(MSG_ADM, &srv, buf);
 
-	/* TODO: cant delete client before all messages are consumed
-	 * may have a message that references this client object*/
 	client_rm(c);
 	close(fd);
 
-	snprintf(buf, BUFSIZE, "%s has left", name);
-	msg_add(srv, buf);
 	return NULL;
 }
 
@@ -137,14 +136,10 @@ void *serve(void *pfd)
 void *broadcast(void *arg)
 {
 	struct msg *m;
-	pthread_mutex_lock(&msg_mx);
 
-	for (;;) {
-		for (m = msgs; m; ) {
-			msg_send(m);
-			m = msg_rm(m);
-		}
-		pthread_cond_wait(&msg_has, &msg_mx);
+	while ((m = msg_pop())) {
+		msg_send(m);
+		free(m);
 	}
 
 	return NULL;
@@ -154,43 +149,28 @@ void msg_send(struct msg *m)
 {
 	struct client *c;
 
+	logmsg(m);
+
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
 
-		write(c->fd, m->sender->name, strlen(m->sender->name));
-		write(c->fd, "\n", 1);
+		if (m->type == MSG_ADM) {
+			write(c->fd, "server\n", 7);
+		}
+		else {
+			write(c->fd, m->sender->name, strlen(m->sender->name));
+			write(c->fd, "\n", 1);
+		}
+
 		write(c->fd, m->buf, strlen(m->buf));
 		write(c->fd, "\n", 1);
 	}
 
 	pthread_mutex_unlock(&client_mx);
 }
-
-void *poll(void *arg)
-{
-	for (;;) {
-		pthread_mutex_lock(&client_mx);
-		struct client *p;
-
-		loginfo("poll:\n");
-		for (p = clients; p; p = p->next) {
-			loginfo("client [%s] [%d]\n", p->name, p->fd);
-		}
-		pthread_mutex_lock(&msg_mx);
-		struct msg *m;
-		for (m = msgs; m; m = m->next)
-			loginfo("msg: [%s] %s\n", m->sender->name, m->buf);
-		loginfo("done\n");
-		pthread_mutex_unlock(&client_mx);
-		pthread_mutex_unlock(&msg_mx);
-		sleep(3);
-	}
-	return NULL;
-}
-
 
 void loginfo(const char *fmt, ...)
 {
@@ -206,12 +186,21 @@ void loginfo(const char *fmt, ...)
 	va_end(ap);
 }
 
-struct msg *msg_add(const struct client *sender, const char *buf)
+void logmsg(const struct msg *m)
 {
-	struct msg *p, *m = dmalloc(sizeof(struct msg));
-	m->buf = strdup(buf);
-	if (!m->buf) pthread_exit(NULL);
+	printf("[%s] %s\n",
+		m->type == MSG_ADM ? "server" : m->sender->name,
+		m->buf);
+}
+
+struct msg *msg_push(enum msg_type type, const struct client *sender, const char *buf)
+{
+	struct msg *p;
+	struct msg *m = dmalloc(sizeof(struct msg));
+
+	m->type = type;
 	m->sender = sender;
+	strcpy(m->buf, buf);
 
 	pthread_mutex_lock(&msg_mx);
 
@@ -231,22 +220,21 @@ struct msg *msg_add(const struct client *sender, const char *buf)
 	return m;
 }
 
-struct msg *msg_rm(struct msg *m)
+struct msg *msg_pop()
 {
 	struct msg *p;
 
-	if (msgs == m) {
-		msgs = msgs->next;
-	} else {
-		for (p = msgs; p && p->next != m; p = p->next)
-			;
-		if (p && p->next == m)
-			p->next = m->next;
+	pthread_mutex_lock(&msg_mx);
+
+	while (!msgs) {
+		pthread_cond_broadcast(&msg_empty);
+		pthread_cond_wait(&msg_has, &msg_mx);
 	}
 
-	p = m->next;
-	free(m->buf);
-	free(m);
+	p = msgs;
+	msgs = msgs->next;
+
+	pthread_mutex_unlock(&msg_mx);
 
 	return p;
 }
@@ -263,6 +251,7 @@ struct client *client_add(int fd, const char *name)
 		c->next = clients;
 	else
 		c->next = NULL;
+
 	clients = c;
 
 	pthread_mutex_unlock(&client_mx);
@@ -273,6 +262,11 @@ struct client *client_add(int fd, const char *name)
 void client_rm(struct client *c)
 {
 	struct client *p;
+
+	pthread_mutex_lock(&msg_mx);
+	while (msgs)
+		pthread_cond_wait(&msg_empty, &msg_mx);
+	pthread_mutex_unlock(&msg_mx);
 
 	pthread_mutex_lock(&client_mx);
 
@@ -285,8 +279,8 @@ void client_rm(struct client *c)
 			p->next = c->next;
 	}
 
-	free(c);
 	pthread_mutex_unlock(&client_mx);
+	free(c);
 }
 
 /*
