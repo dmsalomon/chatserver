@@ -26,8 +26,6 @@ struct client {
 	struct client *next;
 };
 
-const struct client srv = {0, "server", NULL};
-
 enum msg_type { MSG_REG, MSG_ADM };
 
 struct msg {
@@ -120,14 +118,17 @@ void *serve(void *pfd)
 	msg_push(MSG_ADM, c, buf);
 
 	while (read_line(fd, buf, BUFSIZE) > 0) {
+		if (strncmp(buf, "/q", 2) == 0)
+			break;
 		msg_push(MSG_REG, c, buf);
 	}
 
+	close(fd);
+
 	sprintf(buf, "%s has left", name);
-	msg_push(MSG_ADM, &srv, buf);
+	msg_push(MSG_ADM, c, buf);
 
 	client_rm(c);
-	close(fd);
 
 	return NULL;
 }
