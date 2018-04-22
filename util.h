@@ -29,7 +29,6 @@ void perrorf(const char *fmt, ...);
 void reportf(const char *fmt, ...);
 void die(int status, const char *fmt, ...) __attribute__ ((noreturn));
 void pdie(int status, const char *fmt, ...) __attribute__ ((noreturn));
-pid_t dfork(void);
 void *dmalloc(size_t);
 
 void vperrorf(const char *fmt, va_list ap)
@@ -101,51 +100,6 @@ void *dmalloc(size_t n)
 	return p;
 }
 
-
-/* Taken from LPI sockets/read_line.c pg. 1201
- * Michael Kerrisk
- * slightly modified.
- *
- * Reads a line from fd.
- */
-int readline(int fd, char *buf, int n)
-{
-	int ln;
-	int tn = 0;
-	char c;
-
-	if (n <= 0 || !buf) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	for (;;) {
-		ln = read(fd, &c, 1);
-
-		if (ln == -1) {
-			if (errno == EINTR)
-				continue;
-			else
-				return -1;
-		} else if (ln == 0) {
-			if (tn == 0)
-				return 0;
-			else
-				break;
-		} else {
-			if (tn < n-1) {
-				tn++;
-				*buf++ = c;
-			}
-
-			if (c == '\n' || tn == n-1)
-				break;
-		}
-	}
-
-	return tn;
-}
-
 int read_line(int fd, char *buf, size_t bfsz)
 {
 	int n;
@@ -170,51 +124,6 @@ int read_line(int fd, char *buf, size_t bfsz)
 	buf[i - 1] = '\0';
 	return i;
 }
-
-/* Taken from LPI sockets/read_line.c pg. 1201
- * Michael Kerrisk
- * slightly modified.
- *
- * Reads a line from fd.
- */
-int readuntil(int fd, char *buf, int n, char until)
-{
-	int ln;
-	int tn = 0;
-	char c;
-
-	if (n <= 0 || !buf) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	for (;;) {
-		ln = read(fd, &c, 1);
-
-		if (ln == -1) {
-			if (errno == EINTR)
-				continue;
-			else
-				return -1;
-		} else if (ln == 0) {
-			if (tn == 0)
-				return 0;
-			else
-				break;
-		} else {
-			if (tn < n) {
-				tn++;
-				*buf++ = c;
-			}
-
-			if (c == until || tn == n)
-				break;
-		}
-	}
-
-	return tn;
-}
-
 
 /* converts port number to ushort
  *

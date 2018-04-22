@@ -101,11 +101,13 @@ void comm(int fd)
 			pdie(1, "select()");
 
 		if (FD_ISSET(0, &rfds)) {
-			n = readline(0, buf, sizeof(buf));
+			n = read_line(0, buf, sizeof(buf));
 
 			// control-D
 			if (n == 0)
 				break;
+
+			buf[n - 1] = '\n';
 
 			n = write(fd, buf, n);
 			if (n == -1)
