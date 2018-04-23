@@ -29,7 +29,6 @@ void perrorf(const char *fmt, ...);
 void reportf(const char *fmt, ...);
 void die(int status, const char *fmt, ...) __attribute__ ((noreturn));
 void pdie(int status, const char *fmt, ...) __attribute__ ((noreturn));
-pid_t dfork(void);
 void *dmalloc(size_t);
 
 void vperrorf(const char *fmt, va_list ap)
