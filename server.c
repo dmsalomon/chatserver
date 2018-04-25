@@ -159,7 +159,8 @@ void msg_send(struct msg *m)
 			continue;
 
 		if (m->type == MSG_ADM) {
-			write(c->fd, "server\n", 7);
+			write(c->fd, PROGNAME, strlen(PROGNAME));
+			write(c->fd, "\n", 6);
 		}
 		else {
 			write(c->fd, m->sender->name, strlen(m->sender->name));
