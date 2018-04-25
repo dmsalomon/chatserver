@@ -160,7 +160,7 @@ void msg_send(struct msg *m)
 
 		if (m->type == MSG_ADM) {
 			write(c->fd, PROGNAME, strlen(PROGNAME));
-			write(c->fd, "\n", 6);
+			write(c->fd, "\n", 1);
 		}
 		else {
 			write(c->fd, m->sender->name, strlen(m->sender->name));
@@ -191,7 +191,7 @@ void loginfo(const char *fmt, ...)
 void logmsg(const struct msg *m)
 {
 	printf("[%s] %s\n",
-		m->type == MSG_ADM ? "server" : m->sender->name,
+		m->type == MSG_ADM ? PROGNAME : m->sender->name,
 		m->buf);
 }
 
