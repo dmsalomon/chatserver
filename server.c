@@ -16,7 +16,6 @@
 #include "util.h"
 
 void *serve(void *);
-void *poll(void *);
 void *broadcast(void *);
 int tcpbind(unsigned short port);
 
@@ -35,12 +34,12 @@ struct msg {
 	struct msg *next;
 };
 
+struct client *client_add(int, const char *);
+void client_rm(struct client *);
+
 struct msg *msg_push(enum msg_type, const struct client *, const char *);
 struct msg *msg_pop(void);
 void msg_send(struct msg *);
-
-struct client *client_add(int, const char *);
-void client_rm(struct client *);
 
 struct msg *msgs;
 pthread_mutex_t msg_mx = PTHREAD_MUTEX_INITIALIZER;
@@ -123,12 +122,15 @@ void *serve(void *pfd)
 		msg_push(MSG_REG, c, buf);
 	}
 
-	close(fd);
 
 	sprintf(buf, "%s has left", name);
 	msg_push(MSG_ADM, c, buf);
 
 	client_rm(c);
+	/* release the file descriptor only after the
+	 * client has been removed.
+	 */
+	close(fd);
 
 	return NULL;
 }
@@ -152,11 +154,18 @@ void msg_send(struct msg *m)
 
 	logmsg(m);
 
+	/* Writing to client may cause an EPIPE
+	 * since the client may have already quit.
+	 * This is safely ignored
+	 */
+
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
+
+		/* TODO: What write errors do we care about */
 
 		if (m->type == MSG_ADM) {
 			write(c->fd, PROGNAME, strlen(PROGNAME));
