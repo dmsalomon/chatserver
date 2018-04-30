@@ -19,11 +19,10 @@
 #define PROGNAME "prog"
 #endif
 
-#define BUFSIZE  1024
+#define BUFSIZE  4096
 #define NAMESIZE 32
 #define DEFPORT  2000
 #define DEFADDR  "127.0.0.1"
-#define HEADER   "[" PROGNAME "] "
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
