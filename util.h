@@ -19,83 +19,40 @@
 #define PROGNAME "prog"
 #endif
 
-#define BUFSIZE 1024
+#define BUFSIZE  1024
 #define NAMESIZE 32
-#define DEFPORT 2000
-#define DEFADDR "127.0.0.1"
-#define HEADER "[" PROGNAME "] "
+#define DEFPORT  2000
+#define DEFADDR  "127.0.0.1"
+#define HEADER   "[" PROGNAME "] "
 
-void perrorf(const char *fmt, ...);
-void reportf(const char *fmt, ...);
-void die(int status, const char *fmt, ...) __attribute__ ((noreturn));
-void pdie(int status, const char *fmt, ...) __attribute__ ((noreturn));
+void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
 
-void vperrorf(const char *fmt, va_list ap)
+void die(const char *fmt, ...)
 {
+	va_list ap;
+
+	va_start(ap, fmt);
 	fprintf(stderr, PROGNAME ": ");
 	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, ": %s\n", strerror(errno));
-}
-
-/*
- * Like perror but with formatting
- */
-void perrorf(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vperrorf(fmt, ap);
-	va_end(ap);
-}
-
-/*
- * perrorf and then exit
- */
-void pdie(int status, const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vperrorf(fmt, ap);
 	va_end(ap);
 
-	exit(status);
-}
+	if (fmt[0] && fmt[strlen(fmt)-1] == ':') {
+		fputc(' ', stderr);
+		perror(NULL);
+	} else {
+		fputc('\n', stderr);
+	}
 
-void vreportf(const char *fmt, va_list ap)
-{
-	fprintf(stderr, PROGNAME ": ");
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
-}
-
-/*
- * report and error with formatting
- */
-void reportf(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vreportf(fmt, ap);
-	va_end(ap);
-}
-
-void die(int status, const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	vreportf(fmt, ap);
-	va_end(ap);
-
-	exit(status);
+	exit(1);
 }
 
 void *dmalloc(size_t n)
 {
-	void *p = malloc(n);
+	void *p;
 
-	if (!p)
-		pdie(1, "malloc()");
+	if (!(p = malloc(n)))
+		die("malloc():");
 
 	return p;
 }

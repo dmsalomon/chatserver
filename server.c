@@ -69,13 +69,13 @@ int main(int argc, char **argv)
 	socklen_t peer_sz = sizeof(peer_addr);
 
 	if (argc > 2)
-		die(1, "usage: server [port]");
+		die("usage: server [port]");
 
 	if (argc > 1)
 		port = atoport(argv[1]);
 
 	if (port == 0)
-		die(1, "invalid port number");
+		die("invalid port number");
 
 	setbuf(stdout, NULL);
 	signal(SIGPIPE, SIG_IGN);
@@ -84,22 +84,22 @@ int main(int argc, char **argv)
 
 	// spawn the thread to send messages.
 	if ((errno = pthread_create(&tid, NULL, broadcast, NULL)))
-		pdie(1, "pthread_create()");
+		die("pthread_create()");
 	if ((errno = pthread_detach(tid)))
-		pdie(1, "pthread_detach()");
+		die("pthread_detach():");
 
 	// continuously accept clients
 	while ((cfd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
 		arg = dmalloc(sizeof(int));
 		*arg = cfd;
 		if ((errno = pthread_create(&tid, NULL, serve, arg)))
-			pdie(1, "pthread_create()");
+			die("pthread_create():");
 		if ((errno = pthread_detach(tid)))
-			pdie(1, "pthread_detach()");
+			die("pthread_detach():");
 	}
 
 	// error if here
-	pdie(1, "accept()");
+	die("accept():");
 	close(sfd); //useless
 }
 
@@ -226,7 +226,7 @@ struct msg *msg_push(enum msg_type type, const struct client *sender, const char
 		msgq.tail = m;
 	} else {
 		if (msgq.head)
-			die(1, "message queue misalignment");
+			die("message queue misalignment");
 		msgq.head = msgq.tail = m;
 	}
 
@@ -254,7 +254,7 @@ struct msg *msg_pop()
 
 	if (p == msgq.tail) {
 		if (msgq.head)
-			die(1, "message queue misalignment");
+			die("message queue misalignment");
 		msgq.tail = NULL;
 	}
 
@@ -321,7 +321,7 @@ int tcpbind(unsigned short port)
 	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	if ((fd = socket(PF_INET, SOCK_STREAM, 0)) < 0)
-		pdie(1, "socket()");
+		die("socket():");
 
 	/* Make the port immediately reusable after termination */
 	int reuse = 1;
@@ -338,10 +338,10 @@ int tcpbind(unsigned short port)
 #endif
 
 	if (bind(fd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-		pdie(1, "bind()");
+		die("bind():");
 
 	if (listen(fd, 50) < 0)
-		pdie(1, "listen()");
+		die("listen():");
 
 	return fd;
 }

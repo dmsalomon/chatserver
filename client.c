@@ -25,12 +25,12 @@ int main(int argc, char **argv)
 	unsigned short port = DEFPORT;
 
 	if (argc < 2 || argc > 4)
-		die(1, "usage: " PROGNAME " username [host] [port]");
+		die("usage: " PROGNAME " username [host] [port]");
 
 	name = argv[1];
 
 	if (strlen(name) > NAMESIZE - 1)
-		die(1, "username cannot exceed %d characters", NAMESIZE - 1);
+		die("username cannot exceed %d characters", NAMESIZE - 1);
 
 	if (argc > 2)
 		addr = argv[2];
@@ -38,7 +38,7 @@ int main(int argc, char **argv)
 		port = atoport(argv[3]);
 
 	if (port == 0)
-		die(1, "invalid port number");
+		die("invalid port number");
 
 
 	fd = tcpopen(addr, port);
@@ -57,13 +57,13 @@ int tcpopen(const char *addr, unsigned short port)
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
 	if (inet_pton(AF_INET, addr, &sin.sin_addr) == 0)
-		die(1, "%s: not a valid ip address", addr);
+		die("%s: not a valid ip address", addr);
 
 	if ((fd= socket(PF_INET, SOCK_STREAM, 0)) < 0)
-		pdie(1, "socket()");
+		die("socket():");
 
 	if(connect(fd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-		pdie(1, "connect()");
+		die("connect():");
 
 	return fd;
 
@@ -98,7 +98,7 @@ void comm(int fd)
 		FD_SET(fd, &rfds);
 
 		if (select(fd + 1, &rfds, NULL, NULL, NULL) < 0)
-			pdie(1, "select()");
+			die("select():");
 
 		if (FD_ISSET(0, &rfds)) {
 			n = read_line(0, buf, sizeof(buf));
