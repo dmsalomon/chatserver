@@ -34,6 +34,9 @@ struct msg {
 	struct msg *next;
 };
 
+struct client *clients;
+pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
+
 struct client *client_add(int, const char *);
 void client_rm(struct client *);
 
@@ -41,13 +44,17 @@ struct msg *msg_push(enum msg_type, const struct client *, const char *);
 struct msg *msg_pop(void);
 void msg_send(struct msg *);
 
-struct msg *msgs;
-pthread_mutex_t msg_mx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t msg_has = PTHREAD_COND_INITIALIZER;
-pthread_cond_t msg_empty = PTHREAD_COND_INITIALIZER;
-
-struct client *clients;
-pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
+struct {
+	struct msg *head;
+	struct msg *tail;
+	pthread_mutex_t mx;
+	pthread_cond_t has;
+	pthread_cond_t empty;
+} msgq = {
+	.mx = PTHREAD_MUTEX_INITIALIZER,
+	.has = PTHREAD_COND_INITIALIZER,
+	.empty = PTHREAD_COND_INITIALIZER
+};
 
 void loginfo(const char *, ...);
 void logmsg(const struct msg *);
@@ -165,7 +172,7 @@ void msg_send(struct msg *m)
 		if (c == m->sender)
 			continue;
 
-		/* TODO: What write errors do we care about */
+		/* TODO: Which write errors do we care about ? */
 
 		if (m->type == MSG_ADM) {
 			write(c->fd, PROGNAME, strlen(PROGNAME));
@@ -206,27 +213,27 @@ void logmsg(const struct msg *m)
 
 struct msg *msg_push(enum msg_type type, const struct client *sender, const char *buf)
 {
-	struct msg *p;
 	struct msg *m = dmalloc(sizeof(struct msg));
 
 	m->type = type;
 	m->sender = sender;
 	strcpy(m->buf, buf);
 
-	pthread_mutex_lock(&msg_mx);
+	pthread_mutex_lock(&msgq.mx);
 
-	for (p = msgs; p && p->next; p = p->next)
-		;
-
-	if (p)
-		p->next = m;
-	else
-		msgs = m;
+	if (msgq.tail) {
+		msgq.tail->next = m;
+		msgq.tail = m;
+	} else {
+		if (msgq.head)
+			die(1, "message queue misalignment");
+		msgq.head = msgq.tail = m;
+	}
 
 	m->next = NULL;
 
-	pthread_mutex_unlock(&msg_mx);
-	pthread_cond_broadcast(&msg_has);
+	pthread_mutex_unlock(&msgq.mx);
+	pthread_cond_broadcast(&msgq.has);
 
 	return m;
 }
@@ -235,17 +242,23 @@ struct msg *msg_pop()
 {
 	struct msg *p;
 
-	pthread_mutex_lock(&msg_mx);
+	pthread_mutex_lock(&msgq.mx);
 
-	while (!msgs) {
-		pthread_cond_broadcast(&msg_empty);
-		pthread_cond_wait(&msg_has, &msg_mx);
+	while (!msgq.head) {
+		pthread_cond_broadcast(&msgq.empty);
+		pthread_cond_wait(&msgq.has, &msgq.mx);
 	}
 
-	p = msgs;
-	msgs = msgs->next;
+	p = msgq.head;
+	msgq.head = (msgq.head)->next;
 
-	pthread_mutex_unlock(&msg_mx);
+	if (p == msgq.tail) {
+		if (msgq.head)
+			die(1, "message queue misalignment");
+		msgq.tail = NULL;
+	}
+
+	pthread_mutex_unlock(&msgq.mx);
 
 	return p;
 }
@@ -274,10 +287,10 @@ void client_rm(struct client *c)
 {
 	struct client *p;
 
-	pthread_mutex_lock(&msg_mx);
-	while (msgs)
-		pthread_cond_wait(&msg_empty, &msg_mx);
-	pthread_mutex_unlock(&msg_mx);
+	pthread_mutex_lock(&msgq.mx);
+	while (msgq.head)
+		pthread_cond_wait(&msgq.empty, &msgq.mx);
+	pthread_mutex_unlock(&msgq.mx);
 
 	pthread_mutex_lock(&client_mx);
 
