@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -13,7 +15,7 @@
 #define PROGNAME "client"
 #include "util.h"
 
-int tcpopen(const char *addr, unsigned short port);
+int tcpopen(const char *host, const char *serv);
 void comm(int client_fd);
 
 const char *name;
@@ -21,8 +23,8 @@ const char *name;
 int main(int argc, char **argv)
 {
 	int fd;
-	char *addr = DEFADDR;
-	unsigned short port = DEFPORT;
+	const char *host = DEFADDR;
+	const char *port = DEFSERV;
 
 	if (argc < 2 || argc > 4)
 		die("usage: " PROGNAME " username [host] [port]");
@@ -33,40 +35,51 @@ int main(int argc, char **argv)
 		die("username cannot exceed %d characters", NAMESIZE - 1);
 
 	if (argc > 2)
-		addr = argv[2];
+		host = argv[2];
 	if (argc > 3)
-		port = atoport(argv[3]);
+		port = argv[3];
 
-	if (port == 0)
-		die("invalid port number");
-
-
-	fd = tcpopen(addr, port);
+	fd = tcpopen(host, port);
 	setbuf(stdout, NULL);
 
 	comm(fd);
 	close(fd);
 }
 
-int tcpopen(const char *addr, unsigned short port)
+int tcpopen(const char *host, const char *port)
 {
-	int fd;
-	struct sockaddr_in sin;
+	struct addrinfo hints, *res = NULL, *rp;
+	int fd = -1, e;
 
-	memset(&sin, 0, sizeof(sin));
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
-	if (inet_pton(AF_INET, addr, &sin.sin_addr) == 0)
-		die("%s: not a valid ip address", addr);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_flags = AI_NUMERICSERV;
+	hints.ai_socktype = SOCK_STREAM;
 
-	if ((fd= socket(PF_INET, SOCK_STREAM, 0)) < 0)
-		die("socket():");
+	if ((e = getaddrinfo(host, port, &hints, &res))) {
+		fprintf(stderr, PROGNAME ": getaddrinfo: %s\n",
+				gai_strerror(e));
+		exit(1);
+	}
 
-	if(connect(fd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-		die("connect():");
+	for (rp = res; rp; rp = rp->ai_next) {
+		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+		if (fd < 0)
+			continue;
+
+		if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+			close(fd);
+			fd = -1;
+			continue;
+		}
+		break;
+	}
+
+	if (fd < 0)
+		die("could not connect to %s:%s:", host, port);
 
 	return fd;
-
 }
 
 

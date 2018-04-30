@@ -19,10 +19,14 @@
 #define PROGNAME "prog"
 #endif
 
+#define STR_HELPER(x) #x
+#define STR(x)        STR_HELPER(x)
+
 #define BUFSIZE  4096
 #define NAMESIZE 32
-#define DEFPORT  2000
 #define DEFADDR  "127.0.0.1"
+#define DEFPORT  2000
+#define DEFSERV  STR(DEFPORT)
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
