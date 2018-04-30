@@ -12,8 +12,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define STRLEN(s) (sizeof(s)/sizeof(s[0]) - sizeof(s[0]))
-
 #define PROGNAME "server"
 #include "util.h"
 
@@ -81,7 +79,7 @@ int main(int argc, char **argv)
 	socklen_t peer_sz = sizeof(peer_addr);
 
 	if (argc > 2)
-		die("usage: server [port]");
+		die("usage: %s [port]", argv[0]);
 
 	if (argc > 1)
 		if ((port = atoport(argv[1])) == 0)
@@ -210,7 +208,7 @@ void msg_send(struct msg *m)
 			write(c->fd, "\n", 1);
 		}
 		else {
-			write(c->fd, m->sender->name, s->sender->namelen);
+			write(c->fd, m->sender->name, m->sender->namelen);
 			write(c->fd, "\n", 1);
 		}
 

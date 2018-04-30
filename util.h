@@ -19,8 +19,9 @@
 #define PROGNAME "prog"
 #endif
 
-#define STR_HELPER(x) #x
 #define STR(x)        STR_HELPER(x)
+#define STR_HELPER(x) #x
+#define STRLEN(s)     (sizeof(s)/sizeof(s[0]) - sizeof(s[0]))
 
 #define BUFSIZE  4096
 #define NAMESIZE 32
@@ -80,8 +81,8 @@ int read_line(int fd, char *buf, size_t bfsz)
 				return 0;
 		else
 			buf[i++] = c;
-	} while (c != '\n' && i < bfsz);
-	buf[i - 1] = '\0';
+	} while (c != '\n' && i < bfsz-1);
+	buf[i-1] = '\0';
 	return i;
 }
 

@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	const char *port = DEFSERV;
 
 	if (argc < 2 || argc > 4)
-		die("usage: " PROGNAME " username [host] [port]");
+		die("usage: %s username [host] [port]", argv[0]);
 
 	name = argv[1];
 
@@ -120,7 +120,7 @@ void comm(int fd)
 			if (n == 0)
 				break;
 
-			buf[n - 1] = '\n';
+			buf[n-1] = '\n';
 
 			n = write(fd, buf, n);
 			if (n == -1)
