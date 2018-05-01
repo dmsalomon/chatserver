@@ -43,10 +43,13 @@ void client_rm(struct client *);
 /* msg queue api */
 struct msg *msg_push(dispatch type, const struct client *, const char *);
 struct msg *msg_pop(void);
+
+/* msg dispatchers */
 void msg_enter(struct msg*);
 void msg_relay(struct msg*);
 void msg_left(struct msg*);
 
+/* global msg queue object */
 struct {
 	struct msg *head;
 	struct msg *tail;
@@ -344,13 +347,16 @@ struct client *client_add(int fd, const char *name)
 	strcpy(c->name, name);
 	c->namelen = strlen(name);
 
+	/* wrap the socket in a file pointer */
 	if (!(c->fp = fdopen(c->fd, "w")))
 		die("fdopen():");
 
-	/* set line buffering, since all
+	/* setup line buffering, since all
 	 * messages are newline delimited
+	 *
+	 * If line buffering can't setup,
+	 * use no buffering at all.
 	 */
-
 	if (setlinebuf(c->fp) == EOF)
 		setbuf(c->fp, NULL);
 
