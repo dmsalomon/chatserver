@@ -17,6 +17,7 @@
 
 struct client {
 	int fd;
+	FILE *f;
 	char name[NAMESIZE];
 	int namelen;
 	struct client *next;
@@ -45,7 +46,6 @@ struct msg *msg_pop(void);
 void msg_enter(struct msg*);
 void msg_relay(struct msg*);
 void msg_left(struct msg*);
-void msg_send(struct msg *);
 
 struct {
 	struct msg *head;
@@ -187,9 +187,7 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	write(m->sender->fd, PROGNAME, STRLEN(PROGNAME));
-	write(m->sender->fd, "\n", 1);
-	write(m->sender->fd, "Currenly logged on:", STRLEN("Currenly logged on:"));
+	fprintf(m->sender->f, PROGNAME "\nCurrenly logged on: ");
 
 	pthread_mutex_lock(&client_mx);
 
@@ -199,19 +197,14 @@ void msg_enter(struct msg *m)
 
 		/* TODO: Which write errors do we care about ? */
 
-		write(c->fd, PROGNAME, STRLEN(PROGNAME));
-		write(c->fd, "\n", 1);
-		write(c->fd, m->sender->name, m->sender->namelen);
-		write(c->fd, " has entered\n", STRLEN(" has entered\n"));
+		fprintf(c->f, PROGNAME "\n%s has entered\n", m->sender->name);
 
-		write(m->sender->fd, "[", 1);
-		write(m->sender->fd, c->name, c->namelen);
-		write(m->sender->fd, "] ", 1);
+		fprintf(m->sender->f, "[%s] ", c->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
 
-	write(m->sender->fd, "\n", 1);
+	fprintf(m->sender->f, "\n");
 }
 
 void msg_relay(struct msg *m)
@@ -233,10 +226,7 @@ void msg_relay(struct msg *m)
 
 		/* TODO: Which write errors do we care about ? */
 
-		write(c->fd, m->sender->name, m->sender->namelen);
-		write(c->fd, "\n", 1);
-		write(c->fd, m->buf, strlen(m->buf));
-		write(c->fd, "\n", 1);
+		fprintf(c->f, "%s\n%s\n", m->sender->name, m->buf);
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -260,10 +250,7 @@ void msg_left(struct msg *m)
 			continue;
 
 		/* TODO: Which write errors do we care about ? */
-		write(c->fd, PROGNAME, STRLEN(PROGNAME));
-		write(c->fd, "\n", 1);
-		write(c->fd, m->sender->name, m->sender->namelen);
-		write(c->fd, " has left\n", STRLEN(" has left\n"));
+		fprintf(c->f, PROGNAME "\n%s has left\n", m->sender->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -357,6 +344,16 @@ struct client *client_add(int fd, const char *name)
 	strcpy(c->name, name);
 	c->namelen = strlen(name);
 
+	if (!(c->f = fdopen(c->fd, "w")))
+		die("fdopen():");
+
+	/* set line buffering, since all
+	 * messages are newline delimited
+	 */
+
+	if (setlinebuf(c->f) == EOF)
+		setbuf(c->f, NULL);
+
 	pthread_mutex_lock(&client_mx);
 
 	if (clients)
@@ -402,6 +399,8 @@ void client_rm(struct client *c)
 	}
 
 	pthread_mutex_unlock(&client_mx);
+
+	fclose(c->f);
 	free(c);
 }
 
