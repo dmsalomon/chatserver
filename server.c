@@ -17,7 +17,7 @@
 
 struct client {
 	int fd;
-	FILE *f;
+	FILE *fp;
 	char name[NAMESIZE];
 	int namelen;
 	struct client *next;
@@ -187,7 +187,7 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	fprintf(m->sender->f, PROGNAME "\nCurrenly logged on: ");
+	fprintf(m->sender->fp, PROGNAME "\nCurrenly logged on: ");
 
 	pthread_mutex_lock(&client_mx);
 
@@ -197,14 +197,14 @@ void msg_enter(struct msg *m)
 
 		/* TODO: Which write errors do we care about ? */
 
-		fprintf(c->f, PROGNAME "\n%s has entered\n", m->sender->name);
+		fprintf(c->fp, PROGNAME "\n%s has entered\n", m->sender->name);
 
-		fprintf(m->sender->f, "[%s] ", c->name);
+		fprintf(m->sender->fp, "[%s] ", c->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
 
-	fprintf(m->sender->f, "\n");
+	fprintf(m->sender->fp, "\n");
 }
 
 void msg_relay(struct msg *m)
@@ -226,7 +226,7 @@ void msg_relay(struct msg *m)
 
 		/* TODO: Which write errors do we care about ? */
 
-		fprintf(c->f, "%s\n%s\n", m->sender->name, m->buf);
+		fprintf(c->fp, "%s\n%s\n", m->sender->name, m->buf);
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -250,7 +250,7 @@ void msg_left(struct msg *m)
 			continue;
 
 		/* TODO: Which write errors do we care about ? */
-		fprintf(c->f, PROGNAME "\n%s has left\n", m->sender->name);
+		fprintf(c->fp, PROGNAME "\n%s has left\n", m->sender->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -344,15 +344,15 @@ struct client *client_add(int fd, const char *name)
 	strcpy(c->name, name);
 	c->namelen = strlen(name);
 
-	if (!(c->f = fdopen(c->fd, "w")))
+	if (!(c->fp = fdopen(c->fd, "w")))
 		die("fdopen():");
 
 	/* set line buffering, since all
 	 * messages are newline delimited
 	 */
 
-	if (setlinebuf(c->f) == EOF)
-		setbuf(c->f, NULL);
+	if (setlinebuf(c->fp) == EOF)
+		setbuf(c->fp, NULL);
 
 	pthread_mutex_lock(&client_mx);
 
@@ -400,7 +400,7 @@ void client_rm(struct client *c)
 
 	pthread_mutex_unlock(&client_mx);
 
-	fclose(c->f);
+	fclose(c->fp);
 	free(c);
 }
 
