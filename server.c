@@ -22,20 +22,15 @@ struct client {
 	struct client *next;
 };
 
-/* Used to indicate if a message is from
- * a client to be broadcast, or a server
- * generated message to announce a user
- * has entered or left
- */
-enum msg_type { MSG_REG, MSG_ADM };
-
 struct msg {
-	enum msg_type type;
+	void (*send)(struct msg*);
 	char buf[BUFSIZE];
 	int len;
 	const struct client *sender;
 	struct msg *next;
 };
+
+typedef void (*dispatch)(struct msg*);
 
 struct client *clients;
 pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
@@ -45,8 +40,11 @@ struct client *client_add(int, const char *);
 void client_rm(struct client *);
 
 /* msg queue api */
-struct msg *msg_push(enum msg_type, const struct client *, const char *);
+struct msg *msg_push(dispatch type, const struct client *, const char *);
 struct msg *msg_pop(void);
+void msg_enter(struct msg*);
+void msg_relay(struct msg*);
+void msg_left(struct msg*);
 void msg_send(struct msg *);
 
 struct {
@@ -145,17 +143,15 @@ void *serve(void *pfd)
 		return NULL;
 
 	c = client_add(fd, name);
-	sprintf(buf, "%s has entered", name);
-	msg_push(MSG_ADM, c, buf);
+	msg_push(msg_enter, c, NULL);
 
 	while (read_line(fd, buf, BUFSIZE) > 0) {
 		if (strncmp(buf, "/q", 2) == 0)
 			break;
-		msg_push(MSG_REG, c, buf);
+		msg_push(msg_relay, c, buf);
 	}
 
-	sprintf(buf, "%s has left", name);
-	msg_push(MSG_ADM, c, buf);
+	msg_push(msg_left, c, NULL);
 
 	client_rm(c);
 	/* release the file descriptor only after the
@@ -172,7 +168,7 @@ void *broadcast(void *arg)
 	struct msg *m;
 
 	while ((m = msg_pop())) {
-		msg_send(m);
+		m->send(m);
 		free(m);
 	}
 
@@ -180,12 +176,47 @@ void *broadcast(void *arg)
 	return NULL;
 }
 
-void msg_send(struct msg *m)
+void msg_enter(struct msg *m)
 {
 	struct client *c;
 
-	/* log to stdout */
-	logmsg(m);
+	/* Writing to client may cause an EPIPE
+	 * since the client may have already quit.
+	 * This is safely ignored.
+	 *
+	 * No checks are done, its just ignored.
+	 */
+
+	write(m->sender->fd, PROGNAME, STRLEN(PROGNAME));
+	write(m->sender->fd, "\n", 1);
+	write(m->sender->fd, "Currenly logged on:", STRLEN("Currenly logged on:"));
+
+	pthread_mutex_lock(&client_mx);
+
+	for (c = clients; c; c = c->next) {
+		if (c == m->sender)
+			continue;
+
+		/* TODO: Which write errors do we care about ? */
+
+		write(c->fd, PROGNAME, STRLEN(PROGNAME));
+		write(c->fd, "\n", 1);
+		write(c->fd, m->sender->name, m->sender->namelen);
+		write(c->fd, " has entered\n", STRLEN(" has entered\n"));
+
+		write(m->sender->fd, "[", 1);
+		write(m->sender->fd, c->name, c->namelen);
+		write(m->sender->fd, "] ", 1);
+	}
+
+	pthread_mutex_unlock(&client_mx);
+
+	write(m->sender->fd, "\n", 1);
+}
+
+void msg_relay(struct msg *m)
+{
+	struct client *c;
 
 	/* Writing to client may cause an EPIPE
 	 * since the client may have already quit.
@@ -197,23 +228,42 @@ void msg_send(struct msg *m)
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
-		/* dont echo messages */
 		if (c == m->sender)
 			continue;
 
 		/* TODO: Which write errors do we care about ? */
 
-		if (m->type == MSG_ADM) {
-			write(c->fd, PROGNAME, STRLEN(PROGNAME));
-			write(c->fd, "\n", 1);
-		}
-		else {
-			write(c->fd, m->sender->name, m->sender->namelen);
-			write(c->fd, "\n", 1);
-		}
-
-		write(c->fd, m->buf, m->len);
+		write(c->fd, m->sender->name, m->sender->namelen);
 		write(c->fd, "\n", 1);
+		write(c->fd, m->buf, strlen(m->buf));
+		write(c->fd, "\n", 1);
+	}
+
+	pthread_mutex_unlock(&client_mx);
+}
+
+void msg_left(struct msg *m)
+{
+	struct client *c;
+
+	/* Writing to client may cause an EPIPE
+	 * since the client may have already quit.
+	 * This is safely ignored.
+	 *
+	 * No checks are done, its just ignored.
+	 */
+
+	pthread_mutex_lock(&client_mx);
+
+	for (c = clients; c; c = c->next) {
+		if (c == m->sender)
+			continue;
+
+		/* TODO: Which write errors do we care about ? */
+		write(c->fd, PROGNAME, STRLEN(PROGNAME));
+		write(c->fd, "\n", 1);
+		write(c->fd, m->sender->name, m->sender->namelen);
+		write(c->fd, " has left\n", STRLEN(" has left\n"));
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -237,22 +287,18 @@ void loginfo(const char *fmt, ...)
 	va_end(ap);
 }
 
-void logmsg(const struct msg *m)
-{
-	printf("[%s] %s\n",
-		m->type == MSG_ADM ? PROGNAME : m->sender->name,
-		m->buf);
-}
-
 /* push a message on the queue */
-struct msg *msg_push(enum msg_type type, const struct client *sender, const char *buf)
+struct msg *msg_push(dispatch type, const struct client *sender, const char *buf)
 {
-	struct msg *m = dmalloc(sizeof(struct msg));
+	struct msg *m;
 
-	m->type = type;
+	m = dmalloc(sizeof(struct msg));
+	m->send = type;
 	m->sender = sender;
-	strcpy(m->buf, buf);
-	m->len = strlen(buf);
+	if (buf) {
+		strcpy(m->buf, buf);
+		m->len = strlen(buf);
+	}
 
 	pthread_mutex_lock(&msgq.mx);
 

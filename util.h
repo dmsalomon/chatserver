@@ -31,6 +31,7 @@
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
+int fdprintf(int fd, const char *fmt, ...);
 
 void die(const char *fmt, ...)
 {
