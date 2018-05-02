@@ -19,14 +19,12 @@ struct client {
 	int fd;
 	FILE *fp;
 	char name[NAMESIZE];
-	int namelen;
 	struct client *next;
 };
 
 struct msg {
 	void (*send)(struct msg*);
 	char buf[BUFSIZE];
-	int len;
 	const struct client *sender;
 	struct msg *next;
 };
@@ -285,10 +283,8 @@ struct msg *msg_push(dispatch type, const struct client *sender, const char *buf
 	m = dmalloc(sizeof(struct msg));
 	m->send = type;
 	m->sender = sender;
-	if (buf) {
+	if (buf)
 		strcpy(m->buf, buf);
-		m->len = strlen(buf);
-	}
 
 	pthread_mutex_lock(&msgq.mx);
 
@@ -345,7 +341,6 @@ struct client *client_add(int fd, const char *name)
 	struct client *c = dmalloc(sizeof(struct client));
 	c->fd = fd;
 	strcpy(c->name, name);
-	c->namelen = strlen(name);
 
 	/* wrap the socket in a file pointer */
 	if (!(c->fp = fdopen(c->fd, "w")))
