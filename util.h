@@ -62,7 +62,6 @@ void *dmalloc(size_t n)
 	return p;
 }
 
-/* TODO: figure out this line mess */
 int read_line(int fd, char *buf, size_t bfsz)
 {
 	int n;
