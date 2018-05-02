@@ -346,8 +346,7 @@ struct client *client_add(int fd, const char *name)
 	 * If line buffering can't setup,
 	 * use no buffering at all.
 	 */
-	if (setlinebuf(c->fp) == EOF)
-		setbuf(c->fp, NULL);
+	setlinebuf(c->fp);
 
 	pthread_mutex_lock(&client_mx);
 
