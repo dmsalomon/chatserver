@@ -83,7 +83,7 @@ int read_line(int fd, char *buf, size_t bfsz)
 				return 0;
 		else
 			buf[i++] = c;
-	} while (c != '\n' && i < bfsz-1);
+	} while (c != '\n' && i < bfsz);
 	buf[i-1] = '\0';
 	return i;
 }
