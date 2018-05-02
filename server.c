@@ -158,7 +158,6 @@ void *serve(void *pfd)
 	return NULL;
 }
 
-
 void *broadcast(void *arg)
 {
 	struct msg *m;
