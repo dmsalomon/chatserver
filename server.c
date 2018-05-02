@@ -155,11 +155,6 @@ void *serve(void *pfd)
 	msg_push(msg_left, c, NULL);
 
 	client_rm(c);
-	/* release the file descriptor only after the
-	 * client has been removed.
-	 */
-	close(fd);
-
 	return NULL;
 }
 
@@ -401,6 +396,7 @@ void client_rm(struct client *c)
 
 	pthread_mutex_unlock(&client_mx);
 
+	/* will close the file descriptor as well */
 	fclose(c->fp);
 	free(c);
 }
