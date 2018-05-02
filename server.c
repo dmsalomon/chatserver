@@ -34,7 +34,7 @@ typedef void (*dispatch)(struct msg*);
 struct client *clients;
 pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
 
-/* client api test */
+/* client api */
 struct client *client_add(int, const char *);
 void client_rm(struct client *);
 
@@ -158,7 +158,6 @@ void *serve(void *pfd)
 	return NULL;
 }
 
-
 void *broadcast(void *arg)
 {
 	struct msg *m;
@@ -175,6 +174,7 @@ void *broadcast(void *arg)
 void msg_enter(struct msg *m)
 {
 	struct client *c;
+	int first = 1;
 
 	/* Writing to client may cause an EPIPE
 	 * since the client may have already quit.
@@ -183,7 +183,8 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	fprintf(m->sender->fp, PROGNAME "\nCurrenly logged on: ");
+	fprintf(m->sender->fp, PROGNAME "\nWelcome to the ChatSever!\n");
+	fprintf(m->sender->fp, PROGNAME "\n");
 
 	pthread_mutex_lock(&client_mx);
 
@@ -191,14 +192,23 @@ void msg_enter(struct msg *m)
 		if (c == m->sender)
 			continue;
 
-		/* TODO: Which write errors do we care about ? */
+		if (first) {
+			first = 0;
+			fprintf(m->sender->fp, "In chatroom: ");
+		}
+
+		/* ignore all write errors */
+		fprintf(m->sender->fp, "%s", c->name);
+		if (c->next)
+			fprintf(m->sender->fp, ", ");
 
 		fprintf(c->fp, PROGNAME "\n%s has entered\n", m->sender->name);
-
-		fprintf(m->sender->fp, "[%s] ", c->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
+
+	if (first)
+		fprintf(m->sender->fp, "Chatroom empty");
 
 	fprintf(m->sender->fp, "\n");
 }
@@ -207,20 +217,11 @@ void msg_relay(struct msg *m)
 {
 	struct client *c;
 
-	/* Writing to client may cause an EPIPE
-	 * since the client may have already quit.
-	 * This is safely ignored.
-	 *
-	 * No checks are done, its just ignored.
-	 */
-
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
-
-		/* TODO: Which write errors do we care about ? */
 
 		fprintf(c->fp, "%s\n%s\n", m->sender->name, m->buf);
 	}
@@ -232,20 +233,11 @@ void msg_left(struct msg *m)
 {
 	struct client *c;
 
-	/* Writing to client may cause an EPIPE
-	 * since the client may have already quit.
-	 * This is safely ignored.
-	 *
-	 * No checks are done, its just ignored.
-	 */
-
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
-
-		/* TODO: Which write errors do we care about ? */
 		fprintf(c->fp, PROGNAME "\n%s has left\n", m->sender->name);
 	}
 
@@ -365,8 +357,8 @@ void client_rm(struct client *c)
 	struct client *p;
 
 	/* to ensure that all of this clients messages
-	 * we ensure that all messages previously
-	 * buffered have been sent.
+	 * have been sent we simply wait until the
+	 * entire msg queue is empty.
 	 */
 
 	/* block while queue is not empty */
@@ -375,11 +367,11 @@ void client_rm(struct client *c)
 		pthread_cond_wait(&msgq.empty, &msgq.mx);
 	pthread_mutex_unlock(&msgq.mx);
 
-	pthread_mutex_lock(&client_mx);
 
 	/* traverse the client list
 	 * could be more efficient with doubly linked list
 	 */
+	pthread_mutex_lock(&client_mx);
 
 	if (clients == c) {
 		clients = clients->next;
@@ -392,7 +384,7 @@ void client_rm(struct client *c)
 
 	pthread_mutex_unlock(&client_mx);
 
-	/* will close the file descriptor as well */
+	/* closes the file descriptor as well */
 	fclose(c->fp);
 	free(c);
 }

@@ -95,18 +95,14 @@ void comm(int fd)
 	char sender[NAMESIZE];
 	char buf[BUFSIZE];
 
+	fd_set rfds;
+	FD_ZERO(&rfds);
+
 	/* sending name */
 	write(fd, name, strlen(name));
 	n = write(fd, "\n", 1);
 
-	// is the server already gone?
-	if (n == 0)
-		return;
-
-	fd_set rfds;
-	FD_ZERO(&rfds);
-
-	for (;;) {
+	while (n > 0) {
 		FD_SET(0, &rfds);
 		FD_SET(fd, &rfds);
 
@@ -116,14 +112,14 @@ void comm(int fd)
 		if (FD_ISSET(0, &rfds)) {
 			n = read_line(0, buf, sizeof(buf));
 
-			// control-D
-			if (n == 0)
+			// control-D or error
+			if (n < 1)
 				break;
 
 			buf[n-1] = '\n';
-
 			n = write(fd, buf, n);
-			if (n == -1)
+
+			if (n < 0)
 				break;
 		}
 
@@ -136,4 +132,6 @@ void comm(int fd)
 			printf("[%s] %s\n", sender, buf);
 		}
 	}
+
+	if (n < 0) perror(PROGNAME);
 }
