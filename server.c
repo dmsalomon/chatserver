@@ -190,15 +190,12 @@ void msg_enter(struct msg *m)
 		if (c == m->sender)
 			continue;
 
-		/* TODO: Which write errors do we care about ? */
-
+		/* ignore all write errors */
 		fprintf(c->fp, PROGNAME "\n%s has entered\n", m->sender->name);
-
 		fprintf(m->sender->fp, "[%s] ", c->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
-
 	fprintf(m->sender->fp, "\n");
 }
 
@@ -206,20 +203,11 @@ void msg_relay(struct msg *m)
 {
 	struct client *c;
 
-	/* Writing to client may cause an EPIPE
-	 * since the client may have already quit.
-	 * This is safely ignored.
-	 *
-	 * No checks are done, its just ignored.
-	 */
-
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
-
-		/* TODO: Which write errors do we care about ? */
 
 		fprintf(c->fp, "%s\n%s\n", m->sender->name, m->buf);
 	}
@@ -231,20 +219,11 @@ void msg_left(struct msg *m)
 {
 	struct client *c;
 
-	/* Writing to client may cause an EPIPE
-	 * since the client may have already quit.
-	 * This is safely ignored.
-	 *
-	 * No checks are done, its just ignored.
-	 */
-
 	pthread_mutex_lock(&client_mx);
 
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
-
-		/* TODO: Which write errors do we care about ? */
 		fprintf(c->fp, PROGNAME "\n%s has left\n", m->sender->name);
 	}
 
@@ -342,9 +321,6 @@ struct client *client_add(int fd, const char *name)
 
 	/* setup line buffering, since all
 	 * messages are newline delimited
-	 *
-	 * If line buffering can't setup,
-	 * use no buffering at all.
 	 */
 	setlinebuf(c->fp);
 
@@ -367,8 +343,8 @@ void client_rm(struct client *c)
 	struct client *p;
 
 	/* to ensure that all of this clients messages
-	 * we ensure that all messages previously
-	 * buffered have been sent.
+	 * have been sent we simply wait until the
+	 * entire msg queue is empty.
 	 */
 
 	/* block while queue is not empty */
@@ -377,11 +353,11 @@ void client_rm(struct client *c)
 		pthread_cond_wait(&msgq.empty, &msgq.mx);
 	pthread_mutex_unlock(&msgq.mx);
 
-	pthread_mutex_lock(&client_mx);
 
 	/* traverse the client list
 	 * could be more efficient with doubly linked list
 	 */
+	pthread_mutex_lock(&client_mx);
 
 	if (clients == c) {
 		clients = clients->next;
@@ -394,7 +370,7 @@ void client_rm(struct client *c)
 
 	pthread_mutex_unlock(&client_mx);
 
-	/* will close the file descriptor as well */
+	/* closes the file descriptor as well */
 	fclose(c->fp);
 	free(c);
 }
