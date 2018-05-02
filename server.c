@@ -36,7 +36,7 @@ typedef void (*dispatch)(struct msg*);
 struct client *clients;
 pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
 
-/* client api */
+/* client api test */
 struct client *client_add(int, const char *);
 void client_rm(struct client *);
 
