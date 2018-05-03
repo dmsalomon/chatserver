@@ -19,15 +19,12 @@
 #define PROGNAME "prog"
 #endif
 
-#define STR(x)        STR_HELPER(x)
-#define STR_HELPER(x) #x
 #define STRLEN(s)     (sizeof(s)/sizeof(s[0]) - sizeof(s[0]))
 
 #define BUFSIZE  4096
 #define NAMESIZE 32
 #define DEFADDR  "127.0.0.1"
-#define DEFPORT  2000
-#define DEFSERV  STR(DEFPORT)
+#define DEFPORT  "2000"
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
@@ -42,11 +39,11 @@ void die(const char *fmt, ...)
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
 
-	if (fmt[0] && fmt[strlen(fmt)-1] == ':') {
+	if (fmt[0] && fmt[strlen(fmt)-1] != ':') {
+		fputc('\n', stderr);
+	} else {
 		fputc(' ', stderr);
 		perror(NULL);
-	} else {
-		fputc('\n', stderr);
 	}
 
 	exit(1);
@@ -92,7 +89,7 @@ int read_line(int fd, char *buf, size_t bfsz)
  * returns zero on error
  * (we won't use port "0")
  */
-unsigned short atoport(char *str)
+unsigned short atoport(const char *str)
 {
 	char *end;
 	unsigned long int port;

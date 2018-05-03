@@ -3,6 +3,7 @@
  * Dov Salomon (dms833)
  */
 
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -24,7 +25,7 @@ int main(int argc, char **argv)
 {
 	int fd;
 	const char *host = DEFADDR;
-	const char *port = DEFSERV;
+	const char *port = DEFPORT;
 
 	if (argc < 2 || argc > 4)
 		die("usage: %s username [host] [port]", argv[0]);
@@ -39,56 +40,19 @@ int main(int argc, char **argv)
 	if (argc > 3)
 		port = argv[3];
 
-	fd = tcpopen(host, port);
 	setbuf(stdout, NULL);
 
+	/* ignore SIGPIPE */
+	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+		die("SIGPIPE");
+
+	fd = tcpopen(host, port);
 	comm(fd);
 	close(fd);
 }
 
-int tcpopen(const char *host, const char *port)
-{
-	struct addrinfo hints, *res = NULL, *rp;
-	int fd = -1, e;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_flags = AI_NUMERICSERV;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if ((e = getaddrinfo(host, port, &hints, &res))) {
-		fprintf(stderr, PROGNAME ": getaddrinfo: %s\n",
-				gai_strerror(e));
-		exit(1);
-	}
-
-	for (rp = res; rp; rp = rp->ai_next) {
-		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-
-		if (fd < 0)
-			continue;
-
-		if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
-			close(fd);
-			fd = -1;
-			continue;
-		}
-		break;
-	}
-
-	if (fd < 0)
-		die("could not connect to %s:%s:", host, port);
-
-	return fd;
-}
-
-
-/* communicate with the server
- *
- * The client doesn't ignore SIGPIPE, so it
- * will crash if the server is unreachable. This
- * is expected behavior, since the client is ephemeral.
- */
+/* main communication routine */
 void comm(int fd)
 {
 	int n;
@@ -135,3 +99,46 @@ void comm(int fd)
 
 	if (n < 0) perror(PROGNAME);
 }
+
+/* connects a TCP socket to the host
+ *
+ * Host can either be an ip address or
+ * a domain name. Port can either be a
+ * numeric port, or a service name
+ */
+int tcpopen(const char *host, const char *port)
+{
+	struct addrinfo hints, *res = NULL, *rp;
+	int fd = -1, e;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_flags = AI_NUMERICSERV;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ((e = getaddrinfo(host, port, &hints, &res))) {
+		fprintf(stderr, PROGNAME ": getaddrinfo: %s\n",
+				gai_strerror(e));
+		exit(1);
+	}
+
+	for (rp = res; rp; rp = rp->ai_next) {
+		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+		if (fd < 0)
+			continue;
+
+		if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+			close(fd);
+			fd = -1;
+			continue;
+		}
+		break;
+	}
+
+	if (fd < 0)
+		die("could not connect to %s:%s:", host, port);
+
+	return fd;
+}
+

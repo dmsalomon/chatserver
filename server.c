@@ -62,7 +62,7 @@ struct {
 
 void loginfo(const char *, ...);
 void logmsg(const struct msg *);
-int tcpbind(unsigned short port);
+int tcpbind(const char *port);
 
 /* thread entrypoints */
 void *serve(void *);
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 {
 	int sfd, cfd;
 	int *arg;
-	unsigned short port = DEFPORT;
+	char *port = DEFPORT;
 	pthread_t tid;
 	struct sockaddr_in peer_addr;
 	socklen_t peer_sz = sizeof(peer_addr);
@@ -81,8 +81,7 @@ int main(int argc, char **argv)
 		die("usage: %s [port]", argv[0]);
 
 	if (argc > 1)
-		if ((port = atoport(argv[1])) == 0)
-			die("invalid port number");
+		port = argv[1];
 
 	setbuf(stdout, NULL);
 
@@ -93,7 +92,9 @@ int main(int argc, char **argv)
 	 * left. We can just ignore it completely, without
 	 * any harm.
 	 */
-	signal(SIGPIPE, SIG_IGN);
+
+	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+		die("ignore SIGPIPE");
 
 	sfd = tcpbind(port);
 
@@ -211,6 +212,8 @@ void msg_enter(struct msg *m)
 		fprintf(m->sender->fp, "Chatroom empty");
 
 	fprintf(m->sender->fp, "\n");
+
+	loginfo("[%s] %s has entered\n", PROGNAME, m->sender->name);
 }
 
 void msg_relay(struct msg *m)
@@ -227,6 +230,8 @@ void msg_relay(struct msg *m)
 	}
 
 	pthread_mutex_unlock(&client_mx);
+
+	loginfo("[%s] %s\n", m->sender->name, m->buf);
 }
 
 void msg_left(struct msg *m)
@@ -242,6 +247,8 @@ void msg_left(struct msg *m)
 	}
 
 	pthread_mutex_unlock(&client_mx);
+
+	loginfo("[%s] %s has left\n", PROGNAME, m->sender->name);
 }
 
 /* A thread-safe printf
@@ -392,14 +399,18 @@ void client_rm(struct client *c)
 /*
  * allocate the socket and bind to port
  */
-int tcpbind(unsigned short port)
+int tcpbind(const char *port)
 {
 	int fd;
+	unsigned short nport;
 	struct sockaddr_in sin;
+
+	if (!(nport = atoport(port)))
+		die("%s: not a valid port number", port);
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
+	sin.sin_port = htons(nport);
 	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	if ((fd = socket(PF_INET, SOCK_STREAM, 0)) < 0)
