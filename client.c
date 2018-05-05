@@ -142,6 +142,8 @@ int tcpopen(const char *host, const char *port)
 		break;
 	}
 
+	freeaddrinfo(res);
+
 	if (fd < 0)
 		die("could not connect to %s:%s:", host, port);
 
