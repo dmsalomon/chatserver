@@ -262,7 +262,7 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	fprintf(m->sender->fp, PROGNAME "\nWelcome to the ChatServer!\n");
+	fprintf(m->sender->fp, PROGNAME "\nWelcome %s!\n", m->sender->name);
 	fprintf(m->sender->fp, PROGNAME "\n");
 
 	pthread_mutex_lock(&client_mx);

@@ -1,2 +1,16 @@
 
+Chatserver
+==========
+
+Running the server: ./server [port]
+Nothing special it can take an optional port number to bind on. By default
+the port is 2000.
+
+Running the client: ./client username [host] [port]
+Takes a mandatory username (maximum 31 characters). The host and port are
+optional, and they default to localhost (127.0.0.1) and port 2000.
+
+One connected, the client should receive a greeting from the server.
+The client can then send and receive messages. To quit, either send EOF
+with control-D, or send the message "/q".
 

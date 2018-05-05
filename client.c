@@ -47,6 +47,9 @@ int main(int argc, char **argv)
 		die("ignoring SIGPIPE:");
 
 	fd = tcpopen(host, port);
+	printf("[%s] established connection to %s:%s\n",
+			PROGNAME, host, port);
+
 	comm(fd);
 	close(fd);
 }
