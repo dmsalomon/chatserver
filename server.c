@@ -22,6 +22,8 @@ struct client {
 	struct client *next;
 };
 
+/* each message contains the function
+ * that  will dispatch the message */
 struct msg {
 	void (*send)(struct msg*);
 	char buf[BUFSIZE];
@@ -31,6 +33,7 @@ struct msg {
 
 typedef void (*dispatch)(struct msg*);
 
+/* client linked list header and mutex */
 struct client *clients;
 pthread_mutex_t client_mx = PTHREAD_MUTEX_INITIALIZER;
 
@@ -60,8 +63,6 @@ struct {
 	.empty = PTHREAD_COND_INITIALIZER
 };
 
-void loginfo(const char *, ...);
-void logmsg(const struct msg *);
 int tcpbind(const char *port);
 
 /* thread entrypoints */
@@ -92,17 +93,17 @@ int main(int argc, char **argv)
 	 * left. We can just ignore it completely, without
 	 * any harm.
 	 */
-
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
-		die("ignore SIGPIPE");
+		die("ignore SIGPIPE:");
 
 	sfd = tcpbind(port);
+	printf("[%s] listening on port %s\n", PROGNAME, port);
 
 	/* spawn and detach the thread to send messages */
 	if ((errno = pthread_create(&tid, NULL, broadcast, NULL)))
-		die("pthread_create()");
+		die("spawning broadcast thread:");
 	if ((errno = pthread_detach(tid)))
-		die("pthread_detach():");
+		die("detaching broadcast thread:");
 
 	// continuously accept clients
 	while ((cfd = accept(sfd, (struct sockaddr *)&peer_addr, &peer_sz)) != -1) {
@@ -114,9 +115,9 @@ int main(int argc, char **argv)
 
 		/* create and detach */
 		if ((errno = pthread_create(&tid, NULL, serve, arg)))
-			die("pthread_create():");
+			die("spawning client thread:");
 		if ((errno = pthread_detach(tid)))
-			die("pthread_detach():");
+			die("detaching client thread:");
 	}
 
 	/* error if here */
@@ -134,31 +135,33 @@ void *serve(void *pfd)
 	char buf[BUFSIZE];
 	struct client *c;
 
-	/* extracing arg from the pointer */
 	if (!pfd || (fd = *(int *)pfd) <= 0)
 		return NULL;
 
 	/* pointer was malloc'd by main thread */
 	free(pfd);
 
+	/* get client name */
 	if (read_line(fd, name, NAMESIZE) < 0)
 		return NULL;
 
 	c = client_add(fd, name);
 	msg_push(msg_enter, c, NULL);
 
-	while (read_line(fd, buf, BUFSIZE) > 0) {
-		if (strncmp(buf, "/q", 2) == 0)
-			break;
+	/* read while the socket is open */
+	while (read_line(fd, buf, BUFSIZE) > 0)
 		msg_push(msg_relay, c, buf);
-	}
 
+	/* send client left message */
 	msg_push(msg_left, c, NULL);
 
+	/* remove the client, close fd */
 	client_rm(c);
+
 	return NULL;
 }
 
+/* thread for sending messages */
 void *broadcast(void *arg)
 {
 	struct msg *m;
@@ -172,6 +175,81 @@ void *broadcast(void *arg)
 	return NULL;
 }
 
+/* add client to linked list */
+struct client *client_add(int fd, const char *name)
+{
+	struct client *c = dmalloc(sizeof(struct client));
+	c->fd = fd;
+	strcpy(c->name, name);
+
+	/* wrap the socket in a file pointer */
+	if (!(c->fp = fdopen(c->fd, "w")))
+		die("fdopen():");
+
+	/* setup line buffering, since all
+	 * messages are newline delimited
+	 */
+	setlinebuf(c->fp);
+
+	pthread_mutex_lock(&client_mx);
+
+	if (clients)
+		c->next = clients;
+	else
+		c->next = NULL;
+
+	clients = c;
+
+	pthread_mutex_unlock(&client_mx);
+
+	return c;
+}
+
+/* Removes the client from the linked list.
+ * Ensures that this clients messages are
+ * all sent.
+ */
+void client_rm(struct client *c)
+{
+	struct client *p;
+
+	/* to ensure that all of this clients messages
+	 * have been sent we simply wait until the
+	 * entire msg queue is empty.
+	 */
+
+	/* block while queue is not empty */
+	pthread_mutex_lock(&msgq.mx);
+	while (msgq.head)
+		pthread_cond_wait(&msgq.empty, &msgq.mx);
+	pthread_mutex_unlock(&msgq.mx);
+
+
+	/* traverse the client list
+	 * could be more efficient with doubly linked list
+	 */
+	pthread_mutex_lock(&client_mx);
+
+	if (clients == c) {
+		clients = clients->next;
+	} else {
+		for (p = clients; p && p->next != c; p = p->next)
+			;
+		if (p && p->next == c)
+			p->next = c->next;
+	}
+
+	pthread_mutex_unlock(&client_mx);
+
+	/* closes the file descriptor as well */
+	fclose(c->fp);
+	free(c);
+}
+
+
+/* dispatcher for announcing new client
+ * The new client is greeted, while everyone
+ * else is informed of the new client */
 void msg_enter(struct msg *m)
 {
 	struct client *c;
@@ -184,7 +262,7 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	fprintf(m->sender->fp, PROGNAME "\nWelcome to the ChatSever!\n");
+	fprintf(m->sender->fp, PROGNAME "\nWelcome to the ChatServer!\n");
 	fprintf(m->sender->fp, PROGNAME "\n");
 
 	pthread_mutex_lock(&client_mx);
@@ -213,9 +291,12 @@ void msg_enter(struct msg *m)
 
 	fprintf(m->sender->fp, "\n");
 
-	loginfo("[%s] %s has entered\n", PROGNAME, m->sender->name);
+	printf("[%s] %s has entered\n", PROGNAME, m->sender->name);
 }
 
+/* send a standard message
+ * Everyone but the sender is
+ * sent the message */
 void msg_relay(struct msg *m)
 {
 	struct client *c;
@@ -231,9 +312,10 @@ void msg_relay(struct msg *m)
 
 	pthread_mutex_unlock(&client_mx);
 
-	loginfo("[%s] %s\n", m->sender->name, m->buf);
+	printf("[%s] %s\n", m->sender->name, m->buf);
 }
 
+/* announce that the client has left */
 void msg_left(struct msg *m)
 {
 	struct client *c;
@@ -248,25 +330,7 @@ void msg_left(struct msg *m)
 
 	pthread_mutex_unlock(&client_mx);
 
-	loginfo("[%s] %s has left\n", PROGNAME, m->sender->name);
-}
-
-/* A thread-safe printf
- * Prevents 2 threads from writing over each
- * other.
- */
-void loginfo(const char *fmt, ...)
-{
-	static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
-
-	va_list ap;
-	va_start(ap, fmt);
-
-	pthread_mutex_lock(&m);
-	vprintf(fmt, ap);
-	pthread_mutex_unlock(&m);
-
-	va_end(ap);
+	printf("[%s] %s has left\n", PROGNAME, m->sender->name);
 }
 
 /* push a message on the queue */
@@ -328,72 +392,6 @@ struct msg *msg_pop()
 	pthread_mutex_unlock(&msgq.mx);
 
 	return p;
-}
-
-struct client *client_add(int fd, const char *name)
-{
-	struct client *c = dmalloc(sizeof(struct client));
-	c->fd = fd;
-	strcpy(c->name, name);
-
-	/* wrap the socket in a file pointer */
-	if (!(c->fp = fdopen(c->fd, "w")))
-		die("fdopen():");
-
-	/* setup line buffering, since all
-	 * messages are newline delimited
-	 */
-	setlinebuf(c->fp);
-
-	pthread_mutex_lock(&client_mx);
-
-	if (clients)
-		c->next = clients;
-	else
-		c->next = NULL;
-
-	clients = c;
-
-	pthread_mutex_unlock(&client_mx);
-
-	return c;
-}
-
-void client_rm(struct client *c)
-{
-	struct client *p;
-
-	/* to ensure that all of this clients messages
-	 * have been sent we simply wait until the
-	 * entire msg queue is empty.
-	 */
-
-	/* block while queue is not empty */
-	pthread_mutex_lock(&msgq.mx);
-	while (msgq.head)
-		pthread_cond_wait(&msgq.empty, &msgq.mx);
-	pthread_mutex_unlock(&msgq.mx);
-
-
-	/* traverse the client list
-	 * could be more efficient with doubly linked list
-	 */
-	pthread_mutex_lock(&client_mx);
-
-	if (clients == c) {
-		clients = clients->next;
-	} else {
-		for (p = clients; p && p->next != c; p = p->next)
-			;
-		if (p && p->next == c)
-			p->next = c->next;
-	}
-
-	pthread_mutex_unlock(&client_mx);
-
-	/* closes the file descriptor as well */
-	fclose(c->fp);
-	free(c);
 }
 
 /*

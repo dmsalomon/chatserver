@@ -30,6 +30,7 @@ void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
 int fdprintf(int fd, const char *fmt, ...);
 
+/* prints message and exit */
 void die(const char *fmt, ...)
 {
 	va_list ap;
@@ -49,6 +50,7 @@ void die(const char *fmt, ...)
 	exit(1);
 }
 
+/* malloc with error checking */
 void *dmalloc(size_t n)
 {
 	void *p;
@@ -59,6 +61,7 @@ void *dmalloc(size_t n)
 	return p;
 }
 
+/* grabs a nul-terminated line from fd */
 int read_line(int fd, char *buf, size_t bfsz)
 {
 	int n;

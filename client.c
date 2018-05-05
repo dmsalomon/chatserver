@@ -44,7 +44,7 @@ int main(int argc, char **argv)
 
 	/* ignore SIGPIPE */
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
-		die("SIGPIPE");
+		die("ignoring SIGPIPE:");
 
 	fd = tcpopen(host, port);
 	comm(fd);
@@ -78,6 +78,9 @@ void comm(int fd)
 
 			// control-D or error
 			if (n < 1)
+				break;
+
+			if (strncmp(buf, "/q", 2) == 0)
 				break;
 
 			buf[n-1] = '\n';
