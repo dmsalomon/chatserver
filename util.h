@@ -61,7 +61,7 @@ void *dmalloc(size_t n)
 	return p;
 }
 
-/* grabs a nul-terminated line from fd */
+/* gets a nul-terminated line from fd */
 int read_line(int fd, char *buf, size_t bfsz)
 {
 	int n;

@@ -83,7 +83,7 @@ void comm(int fd)
 			if (n < 1)
 				break;
 
-			if (strncmp(buf, "/q", 2) == 0)
+			if (strcmp(buf, "/q") == 0)
 				break;
 
 			buf[n-1] = '\n';
