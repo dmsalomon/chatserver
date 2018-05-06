@@ -142,7 +142,7 @@ void *serve(void *pfd)
 	free(pfd);
 
 	/* get client name */
-	if (read_line(fd, name, NAMESIZE) < 0)
+	if (read_line(fd, name, NAMESIZE) < 1)
 		return NULL;
 
 	c = client_add(fd, name);
