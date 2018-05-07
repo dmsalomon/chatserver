@@ -10,11 +10,11 @@ ZIP:=$(DIR).zip
 all: $(PROGS)
 
 clean:
-	$(RM) *.o $(PROGS) $(ZIP)
+	$(RM) *.o $(PROGS) *.zip
 
 $(ZIP): clean
 	cd .. && \
-	zip -r $@ $(DIR)/*.[ch] $(DIR)/Makefile && \
+	zip -r $@ $(DIR)/* && \
 	mv $@ $(DIR)/.
 
 dist: $(ZIP)
