@@ -27,7 +27,8 @@
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
 void *dmalloc(size_t);
-int fdprintf(int fd, const char *fmt, ...);
+int read_line(int, char *, size_t)
+unsigned short atoport(const char *)
 
 /* prints message and exit */
 void die(const char *fmt, ...)
