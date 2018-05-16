@@ -15,8 +15,7 @@
 #include <unistd.h>
 
 #ifndef PROGNAME
-#warning PROGNAME undefined
-#define PROGNAME "prog"
+#error  PROGNAME undefined
 #endif
 
 #define STRLEN(s)     (sizeof(s)/sizeof(s[0]) - sizeof(s[0]))

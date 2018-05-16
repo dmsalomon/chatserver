@@ -12,7 +12,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define PROGNAME "server"
+#define  PROGNAME "server"
 #include "util.h"
 
 struct client {
