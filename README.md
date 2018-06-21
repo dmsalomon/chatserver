@@ -1,7 +1,4 @@
 
-Homework #6
-Dov Salomon (dms833)
-
 Client
 ======
 Running the client: ./client username [host] [port]
