@@ -5,18 +5,18 @@ PROGS:=\
 	server\
 	client
 DIR:=$(notdir $(basename $(CURDIR)))
-ZIP:=$(DIR).zip
+TAR:=$(DIR).tar.gz
 
 all: $(PROGS)
 
 clean:
 	$(RM) *.o $(PROGS) *.zip
 
-$(ZIP): clean
+$(TAR): clean
 	cd .. && \
-	zip -r $@ $(DIR)/* && \
+	tar czf $@ $(DIR) && \
 	mv $@ $(DIR)/.
 
-dist: $(ZIP)
+dist: $(TAR)
 
 .PHONY: all clean dist
