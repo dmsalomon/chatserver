@@ -10,7 +10,7 @@ TAR:=$(DIR).tar.gz
 all: $(PROGS)
 
 clean:
-	$(RM) *.o $(PROGS) *.zip
+	$(RM) *.o $(PROGS) $(TAR)
 
 $(TAR): clean
 	cd .. && \
