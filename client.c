@@ -122,19 +122,16 @@ int tcpopen(const char *host, const char *port)
 	hints.ai_flags = AI_NUMERICSERV;
 	hints.ai_socktype = SOCK_STREAM;
 
-	if ((e = getaddrinfo(host, port, &hints, &res))) {
-		fprintf(stderr, PROGNAME ": getaddrinfo: %s\n",
-				gai_strerror(e));
-		exit(1);
-	}
+	if ((e = getaddrinfo(host, port, &hints, &res)))
+		die("getaddrinfo: %s", gai_strerror(e));
 
 	for (rp = res; rp; rp = rp->ai_next) {
-		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 
 		if (fd < 0)
 			continue;
 
-		if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+		if (connect(fd, rp->ai_addr, rp->ai_addrlen) < 0) {
 			close(fd);
 			fd = -1;
 			continue;

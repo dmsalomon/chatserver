@@ -22,7 +22,7 @@
 
 #define BUFSIZE  4096
 #define NAMESIZE 32
-#define DEFADDR  "127.0.0.1"
+#define DEFADDR  "localhost"
 #define DEFPORT  "2000"
 
 void die(const char *fmt, ...) __attribute__ ((noreturn));
