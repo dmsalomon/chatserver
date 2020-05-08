@@ -2,3 +2,5 @@
 client
 server
 *.tar.gz
+*.o
+*.d

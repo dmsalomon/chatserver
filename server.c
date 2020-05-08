@@ -3,7 +3,9 @@
  * Dov Salomon (dms833)
  */
 
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
@@ -12,7 +14,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define  PROGNAME "server"
 #include "util.h"
 
 struct client {
@@ -69,6 +70,8 @@ int tcpbind(const char *port);
 void *serve(void *);
 void *broadcast(void *);
 
+char *argv0 = "server";
+
 int main(int argc, char **argv)
 {
 	int sfd, cfd;
@@ -97,7 +100,7 @@ int main(int argc, char **argv)
 		die("ignore SIGPIPE:");
 
 	sfd = tcpbind(port);
-	printf("[%s] listening on port %s\n", PROGNAME, port);
+	printf("[%s] listening on port %s\n", argv0, port);
 
 	/* spawn and detach the thread to send messages */
 	if ((errno = pthread_create(&tid, NULL, broadcast, NULL)))
@@ -110,7 +113,7 @@ int main(int argc, char **argv)
 		/* alloc mem for the arg, since we will reuse
 		 * cfd in this function.
 		 * The thread will free it. */
-		arg = dmalloc(sizeof(int));
+		arg = xmalloc(sizeof(int));
 		*arg = cfd;
 
 		/* create and detach */
@@ -146,6 +149,7 @@ void *serve(void *pfd)
 		return NULL;
 
 	c = client_add(fd, name);
+	if (!c) return NULL;
 	msg_push(msg_enter, c, NULL);
 
 	/* read while the socket is open */
@@ -178,31 +182,52 @@ void *broadcast(void *arg)
 /* add client to linked list */
 struct client *client_add(int fd, const char *name)
 {
-	struct client *c = dmalloc(sizeof(struct client));
-	c->fd = fd;
-	strcpy(c->name, name);
+	FILE *fp;
+	struct client *c, *p;
 
 	/* wrap the socket in a file pointer */
-	if (!(c->fp = fdopen(c->fd, "w")))
+	if (!(fp = fdopen(fd, "w")))
 		die("fdopen():");
 
 	/* setup line buffering, since all
 	 * messages are newline delimited
 	 */
-	setlinebuf(c->fp);
+	setlinebuf(fp);
+
+	if (strncmp(name, "server", 6) == 0) {
+		fprintf(fp, "%s\n%s\n", "server", "invalid name");
+		goto invalid;
+	}
+
+	c = xmalloc(sizeof(struct client));
+	c->fd = fd;
+	c->fp = fp;
+	strcpy(c->name, name);
 
 	pthread_mutex_lock(&client_mx);
 
-	if (clients)
-		c->next = clients;
-	else
-		c->next = NULL;
+	/* check if name is in use */
+	for (p = clients; p; p = p->next) {
+		if (strcmp(c->name, p->name) == 0) {
+			fprintf(fp, "%s\n%s\n", "server", "name is use");
+			goto used;
+		}
+	}
 
+	/* push client to head of the list */
+	c->next = clients;
 	clients = c;
 
 	pthread_mutex_unlock(&client_mx);
 
 	return c;
+
+used:
+	pthread_mutex_unlock(&client_mx);
+	free(c);
+invalid:
+	fclose(fp);
+	return NULL;
 }
 
 /* Removes the client from the linked list.
@@ -262,8 +287,8 @@ void msg_enter(struct msg *m)
 	 * No checks are done, its just ignored.
 	 */
 
-	fprintf(m->sender->fp, PROGNAME "\nWelcome %s!\n", m->sender->name);
-	fprintf(m->sender->fp, PROGNAME "\n");
+	fprintf(m->sender->fp, "%s\nWelcome %s!\n", "server", m->sender->name);
+	fprintf(m->sender->fp, "%s\n", "server");
 
 	pthread_mutex_lock(&client_mx);
 
@@ -277,11 +302,9 @@ void msg_enter(struct msg *m)
 		}
 
 		/* ignore all write errors */
-		fprintf(m->sender->fp, "%s", c->name);
-		if (c->next)
-			fprintf(m->sender->fp, ", ");
+		fprintf(m->sender->fp, "%s%s", c->name, c->next ? ", " : ".");
 
-		fprintf(c->fp, PROGNAME "\n%s has entered\n", m->sender->name);
+		fprintf(c->fp, "server\n%s has entered\n", m->sender->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
@@ -291,7 +314,7 @@ void msg_enter(struct msg *m)
 
 	fprintf(m->sender->fp, "\n");
 
-	printf("[%s] %s has entered\n", PROGNAME, m->sender->name);
+	printf("[%s] %s has entered\n", "server", m->sender->name);
 }
 
 /* send a standard message
@@ -325,12 +348,12 @@ void msg_left(struct msg *m)
 	for (c = clients; c; c = c->next) {
 		if (c == m->sender)
 			continue;
-		fprintf(c->fp, PROGNAME "\n%s has left\n", m->sender->name);
+		fprintf(c->fp, "server\n%s has left\n", m->sender->name);
 	}
 
 	pthread_mutex_unlock(&client_mx);
 
-	printf("[%s] %s has left\n", PROGNAME, m->sender->name);
+	printf("[%s] %s has left\n", "server", m->sender->name);
 }
 
 /* push a message on the queue */
@@ -338,7 +361,7 @@ struct msg *msg_push(dispatch type, const struct client *sender, const char *buf
 {
 	struct msg *m;
 
-	m = dmalloc(sizeof(struct msg));
+	m = xmalloc(sizeof(struct msg));
 	m->send = type;
 	m->sender = sender;
 	if (buf)
@@ -385,6 +408,7 @@ struct msg *msg_pop()
 	/* need to NULL the tail if the queue is empty */
 	if (p == msgq.tail) {
 		if (msgq.head)
+			// should never happen unless I screwed up
 			die("message queue misalignment");
 		msgq.tail = NULL;
 	}

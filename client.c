@@ -20,6 +20,7 @@ int tcpopen(const char *host, const char *serv);
 void comm(int client_fd);
 
 const char *name;
+char *argv0 = "client";
 
 int main(int argc, char **argv)
 {
@@ -77,7 +78,7 @@ void comm(int fd)
 			die("select():");
 
 		if (FD_ISSET(0, &rfds)) {
-			n = read_line(0, buf, sizeof(buf));
+			n = read_line(0, buf, sizeof(buf)-1);
 
 			// control-D or error
 			if (n < 1)
